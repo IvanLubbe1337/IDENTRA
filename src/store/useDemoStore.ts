@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import {
+  INITIAL_DEMO_ACCOUNTS,
   INITIAL_DEMO_APPS,
   INITIAL_DEMO_AUDIT,
+  INITIAL_DEMO_BIRTHRIGHTS,
   INITIAL_DEMO_ENTITLEMENTS,
   INITIAL_DEMO_NON_HUMAN,
   INITIAL_DEMO_PEOPLE,
@@ -10,8 +12,10 @@ import {
   INITIAL_DEMO_ROLES,
   INITIAL_IMPORT_RUNS,
   INITIAL_PROVISIONING_JOBS,
+  evaluateBirthrightMatches,
   type DemoApplication,
   type DemoAuditEntry,
+  type DemoBirthrightRule,
   type DemoEntitlement,
   type DemoImportRun,
   type DemoNonHuman,
@@ -21,6 +25,7 @@ import {
   type DemoReviewItem,
   type DemoRole,
   type DemoSectionId,
+  type DemoTargetAccount,
 } from '@/data/demoSampleData';
 import { useSceneStore } from '@/store/useSceneStore';
 
@@ -39,6 +44,8 @@ interface DemoStore {
   applications: DemoApplication[];
   entitlements: DemoEntitlement[];
   roles: DemoRole[];
+  birthrights: DemoBirthrightRule[];
+  accounts: DemoTargetAccount[];
   reviews: DemoReviewItem[];
   policies: DemoPolicy[];
   provisioningJobs: DemoProvisioningJob[];
@@ -49,6 +56,18 @@ interface DemoStore {
   setSearchQuery: (q: string) => void;
   setSelectedPersonId: (id: string | null) => void;
   clearToast: () => void;
+
+  // Birthright Engine actions
+  toggleBirthrightStatus: (ruleId: string) => void;
+  addBirthrightRule: (
+    rule: Omit<DemoBirthrightRule, 'id' | 'code' | 'lastEvaluated'>
+  ) => void;
+  deleteBirthrightRule: (ruleId: string) => void;
+  runBirthrightReconciliation: (ruleId: string) => void;
+
+  // Account & Orphan Remediation actions (Reporting)
+  quarantineOrphanAccount: (accountId: string) => void;
+  linkOrphanAccountToOwner: (accountId: string, personId: string) => void;
 
   // Import runs actions
   triggerManualImport: (system: DemoImportRun['system']) => void;
@@ -93,6 +112,8 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
   applications: INITIAL_DEMO_APPS,
   entitlements: INITIAL_DEMO_ENTITLEMENTS,
   roles: INITIAL_DEMO_ROLES,
+  birthrights: INITIAL_DEMO_BIRTHRIGHTS,
+  accounts: INITIAL_DEMO_ACCOUNTS,
   reviews: INITIAL_DEMO_REVIEWS,
   policies: INITIAL_DEMO_POLICIES,
   provisioningJobs: INITIAL_PROVISIONING_JOBS,
@@ -103,6 +124,213 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
   setSearchQuery: (q) => set({ searchQuery: q }),
   setSelectedPersonId: (id) => set({ selectedPersonId: id }),
   clearToast: () => set({ toastMessage: null }),
+
+  toggleBirthrightStatus: (ruleId) => {
+    const rule = get().birthrights.find((b) => b.id === ruleId);
+    if (!rule) return;
+    const nextStatus = rule.status === 'Active' ? 'Paused' : 'Active';
+    set((s) => ({
+      birthrights: s.birthrights.map((b) =>
+        b.id === ruleId ? { ...b, status: nextStatus, lastEvaluated: 'Just now' } : b
+      ),
+      toastMessage: `${nextStatus === 'Active' ? 'Activated' : 'Paused'} birthright rule ${rule.code} (${rule.name}).`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: timeNow(),
+          actor: 'Birthright Engine',
+          processTag: 'BIRTHRIGHT',
+          tone: nextStatus === 'Active' ? 'emerald' : 'amber',
+          action: `${nextStatus === 'Active' ? 'Activated' : 'Paused'} birthright policy ${rule.code}`,
+          target: rule.name,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  addBirthrightRule: (input) => {
+    const existing = get().birthrights;
+    const nextCode = `BR-${String(existing.length + 1).padStart(3, '0')}`;
+    const newRule: DemoBirthrightRule = {
+      ...input,
+      id: `br-${Date.now()}`,
+      code: nextCode,
+      lastEvaluated: 'Just now',
+    };
+    const matchedCount = evaluateBirthrightMatches(newRule, get().people).length;
+
+    set((s) => ({
+      birthrights: [newRule, ...s.birthrights],
+      toastMessage: `Created birthright rule ${nextCode} (${newRule.name}) — matched ${matchedCount} ${matchedCount === 1 ? 'identity' : 'identities'}.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: timeNow(),
+          actor: 'Birthright Engine',
+          processTag: 'BR-CREATE',
+          tone: 'sky',
+          action: `Created ${newRule.scopeMode} birthright ${nextCode} (${matchedCount} matched)`,
+          target: newRule.name,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  deleteBirthrightRule: (ruleId) => {
+    const rule = get().birthrights.find((b) => b.id === ruleId);
+    if (!rule) return;
+    set((s) => ({
+      birthrights: s.birthrights.filter((b) => b.id !== ruleId),
+      toastMessage: `Removed birthright rule ${rule.code} (${rule.name}).`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: timeNow(),
+          actor: 'Birthright Engine',
+          processTag: 'BR-DELETE',
+          tone: 'amber',
+          action: `Deleted birthright rule ${rule.code}`,
+          target: rule.name,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  runBirthrightReconciliation: (ruleId) => {
+    const rule = get().birthrights.find((b) => b.id === ruleId);
+    if (!rule) return;
+    const matches = evaluateBirthrightMatches(rule, get().people);
+    const stamp = timeNow();
+    const firstMatch = matches[0];
+    const firstGrant = rule.grants[0];
+
+    const newJob: DemoProvisioningJob | null =
+      firstMatch && firstGrant
+        ? {
+            id: `job-br-${Date.now()}`,
+            jobCode: `PRV-${8840 + get().provisioningJobs.length}`,
+            identity: firstMatch.name,
+            identityEmail: firstMatch.email,
+            entitlementOrRole: `${rule.code}: ${firstGrant.name}`,
+            application:
+              firstGrant.targetSystem === 'Active Directory' ||
+              firstGrant.targetSystem === 'Microsoft Entra ID' ||
+              firstGrant.targetSystem === 'SAP S/4HANA Finance' ||
+              firstGrant.targetSystem === 'AWS Prod Vault' ||
+              firstGrant.targetSystem === 'Snowflake PII Lake'
+                ? firstGrant.targetSystem
+                : 'Okta Workforce',
+            operation: 'Update',
+            status: rule.provisioningMode === 'Simulation Mode' ? 'Simulation Mode' : 'Completed',
+            triggeredBy: `Birthright Engine (${rule.code})`,
+            timestamp: stamp,
+            durationMs: rule.provisioningMode === 'Simulation Mode' ? null : 215,
+            mappings: [
+              {
+                attribute: 'birthrightRule',
+                before: null,
+                after: `${rule.code} (${rule.scopeMode})`,
+                rule: 'Dynamic Birthright Expression',
+              },
+              {
+                attribute: 'grantedAccess',
+                before: null,
+                after: rule.grants.map((g) => g.name).join(', '),
+                rule: 'Desired-State Entitlement Expansion',
+              },
+            ],
+          }
+        : null;
+
+    set((s) => ({
+      birthrights: s.birthrights.map((b) =>
+        b.id === ruleId ? { ...b, lastEvaluated: 'Just now' } : b
+      ),
+      provisioningJobs: newJob ? [newJob, ...s.provisioningJobs] : s.provisioningJobs,
+      toastMessage:
+        matches.length > 0
+          ? `Evaluated ${rule.code}: reconciled ${rule.grants.length} grants across ${matches.length} matched ${matches.length === 1 ? 'identity' : 'identities'} (${rule.provisioningMode}).`
+          : `Evaluated ${rule.code}: 0 identities currently match the criteria.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'Birthright Engine',
+          processTag: 'BR-EVAL',
+          tone: 'emerald',
+          action: `Evaluated ${rule.code} (${matches.length} matched · ${rule.grants.length} grants · ${rule.provisioningMode})`,
+          target: rule.name,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  quarantineOrphanAccount: (accountId) => {
+    const acc = get().accounts.find((a) => a.id === accountId);
+    if (!acc) return;
+    set((s) => ({
+      accounts: s.accounts.map((a) =>
+        a.id === accountId
+          ? {
+              ...a,
+              accountStatus: 'Quarantined',
+              correlationState: 'Disabled (Leaver)',
+              riskScore: 6,
+            }
+          : a
+      ),
+      toastMessage: `Quarantined & disabled orphaned account ${acc.accountName} on ${acc.application}.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: timeNow(),
+          actor: 'Orphan Remediation',
+          processTag: 'ORPHAN-CUT',
+          tone: 'emerald',
+          action: `Disabled & quarantined orphaned account on ${acc.application}`,
+          target: acc.accountName,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  linkOrphanAccountToOwner: (accountId, personId) => {
+    const acc = get().accounts.find((a) => a.id === accountId);
+    const owner = get().people.find((p) => p.id === personId);
+    if (!acc || !owner) return;
+    set((s) => ({
+      accounts: s.accounts.map((a) =>
+        a.id === accountId
+          ? {
+              ...a,
+              personId: owner.id,
+              correlatedIdentity: `${owner.name} (Steward)`,
+              correlationState: 'Correlated',
+              orphanReason: undefined,
+              riskScore: Math.min(a.riskScore, 24),
+            }
+          : a
+      ),
+      toastMessage: `Correlated ${acc.accountName} (${acc.application}) to accountable owner ${owner.name}.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: timeNow(),
+          actor: 'Identity Correlation',
+          processTag: 'CORRELATE',
+          tone: 'sky',
+          action: `Linked orphaned account ${acc.accountName} to steward ${owner.name}`,
+          target: acc.application,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
 
   triggerManualImport: (system) => {
     const today = new Date().toISOString().slice(0, 10);
@@ -430,6 +658,23 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
 
     set((s) => ({
       people: [newPerson, ...s.people],
+      accounts: [
+        {
+          id: `acc-new-${Date.now()}`,
+          accountName: `${pick.sam}@corp.identra.net`,
+          application: 'Active Directory',
+          accountType: 'Human',
+          personId: newPerson.id,
+          correlatedIdentity: fullName,
+          correlationState: 'Correlated',
+          accountStatus: 'Enabled',
+          privileged: false,
+          lastLogin: 'Just provisioned',
+          daysInactive: 0,
+          riskScore: 11,
+        },
+        ...s.accounts,
+      ],
       toastMessage: `Onboarded ${fullName} (${pick.dept}) with Day-1 birthright roles via Workday HRIS.`,
       auditLog: [
         {
@@ -546,6 +791,16 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
       ),
       entitlements: s.entitlements.map((e) =>
         e.assignedTo.includes(person.name) ? { ...e, status: 'Revoked' } : e
+      ),
+      accounts: s.accounts.map((a) =>
+        a.personId === personId
+          ? {
+              ...a,
+              accountStatus: 'Disabled',
+              correlationState: 'Disabled (Leaver)',
+              riskScore: 4,
+            }
+          : a
       ),
       policies: s.policies.map((pol) =>
         pol.affectedIdentity?.includes(person.name) ? { ...pol, violations: 0 } : pol
@@ -668,6 +923,18 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
       ),
       entitlements: s.entitlements.map((e) =>
         e.assignedTo === nh.name ? { ...e, status: 'Revoked' } : e
+      ),
+      accounts: s.accounts.map((a) =>
+        a.accountName === nh.name
+          ? {
+              ...a,
+              correlatedIdentity:
+                nh.owner.includes('Unassigned') ? 'Platform Security (Steward)' : `${nh.owner} (Owner)`,
+              correlationState: 'Correlated',
+              orphanReason: undefined,
+              riskScore: 14,
+            }
+          : a
       ),
       policies: s.policies.map((pol) =>
         pol.affectedIdentity === nh.name ? { ...pol, violations: 0 } : pol
@@ -844,6 +1111,8 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
       applications: INITIAL_DEMO_APPS,
       entitlements: INITIAL_DEMO_ENTITLEMENTS,
       roles: INITIAL_DEMO_ROLES,
+      birthrights: INITIAL_DEMO_BIRTHRIGHTS,
+      accounts: INITIAL_DEMO_ACCOUNTS,
       reviews: INITIAL_DEMO_REVIEWS,
       policies: INITIAL_DEMO_POLICIES,
       provisioningJobs: INITIAL_PROVISIONING_JOBS,

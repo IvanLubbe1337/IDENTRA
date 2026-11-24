@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ArrowLeft,
+  BarChart3,
   Bell,
   BookOpen,
   Bot,
@@ -12,6 +13,7 @@ import {
   DownloadCloud,
   FileCheck2,
   GitBranch,
+  GitMerge,
   KeyRound,
   LayoutDashboard,
   Menu,
@@ -35,11 +37,13 @@ import {
   EntitlementsView,
   RolesView,
 } from '@/demo/views/AccessViews';
+import { BirthrightsView } from '@/demo/views/BirthrightsView';
 import {
   AccessReviewsView,
   ComplianceView,
   PoliciesSodView,
 } from '@/demo/views/GovernanceViews';
+import { ReportingView } from '@/demo/views/ReportingView';
 import {
   AuditLogView,
   LifecycleView,
@@ -76,6 +80,7 @@ const SIDEBAR_NAV: NavGroup[] = [
       { id: 'applications', label: 'Applications', icon: Box },
       { id: 'entitlements', label: 'Entitlements', icon: KeyRound },
       { id: 'roles', label: 'Roles', icon: Shield },
+      { id: 'birthrights', label: 'Birthrights', icon: GitMerge },
     ],
   },
   {
@@ -84,6 +89,7 @@ const SIDEBAR_NAV: NavGroup[] = [
       { id: 'access-reviews', label: 'Access reviews', icon: ClipboardCheck },
       { id: 'policies-sod', label: 'Policies & SoD', icon: ShieldAlert },
       { id: 'compliance', label: 'Compliance', icon: FileCheck2 },
+      { id: 'reporting', label: 'Reporting', icon: BarChart3 },
     ],
   },
   {
@@ -147,6 +153,9 @@ export function DemoLayout() {
   const failedImports = useDemoStore(
     (s) => s.importRuns.filter((r) => r.status === 'Failed').length
   );
+  const orphanedAccounts = useDemoStore(
+    (s) => s.accounts.filter((a) => a.correlationState === 'Orphaned').length
+  );
 
   // Auto-dismiss live Process++ toast notifications
   useEffect(() => {
@@ -161,6 +170,7 @@ export function DemoLayout() {
     if (id === 'access-reviews' && pendingReviews > 0) return pendingReviews;
     if (id === 'policies-sod' && activeViolations > 0) return activeViolations;
     if (id === 'entitlements' && driftEntitlements > 0) return driftEntitlements;
+    if (id === 'reporting' && orphanedAccounts > 0) return orphanedAccounts;
     if (id === 'provisioning-engine' && pendingProvisioning > 0) return pendingProvisioning;
     if (id === 'imports' && failedImports > 0) return failedImports;
     return null;
@@ -180,12 +190,16 @@ export function DemoLayout() {
         return <EntitlementsView />;
       case 'roles':
         return <RolesView />;
+      case 'birthrights':
+        return <BirthrightsView />;
       case 'access-reviews':
         return <AccessReviewsView />;
       case 'policies-sod':
         return <PoliciesSodView />;
       case 'compliance':
         return <ComplianceView />;
+      case 'reporting':
+        return <ReportingView />;
       case 'lifecycle':
         return <LifecycleView />;
       case 'workflows':

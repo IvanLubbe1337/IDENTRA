@@ -5,9 +5,11 @@ export type DemoSectionId =
   | 'applications'
   | 'entitlements'
   | 'roles'
+  | 'birthrights'
   | 'access-reviews'
   | 'policies-sod'
   | 'compliance'
+  | 'reporting'
   | 'lifecycle'
   | 'workflows'
   | 'provisioning-engine'
@@ -1751,5 +1753,568 @@ export const INITIAL_DEMO_AUDIT: DemoAuditEntry[] = [
     tone: 'rose',
     action: 'Detected toxic role overlap: AP-Clerk + Payment Approver',
     target: 'Elena Vance',
+  },
+];
+
+/* -------------------------------------------------------------------------- */
+/* Birthrights Rules Engine (Attributes, Contexts & Multi-Context Logic)      */
+/* -------------------------------------------------------------------------- */
+
+export type BirthrightScopeMode =
+  | 'Identity Attributes'
+  | 'Single Context'
+  | 'Context Combination'
+  | 'Hybrid (Attributes + Contexts)';
+
+export type BirthrightAttributeField =
+  | 'type'
+  | 'contractType'
+  | 'department'
+  | 'companyName'
+  | 'orgUnitName'
+  | 'costCenterCode'
+  | 'location'
+  | 'title'
+  | 'jmlStatus'
+  | 'sourceSystem';
+
+export type BirthrightAttributeOperator = 'equals' | 'not_equals' | 'contains';
+
+export interface BirthrightAttributeCondition {
+  id: string;
+  field: BirthrightAttributeField;
+  operator: BirthrightAttributeOperator;
+  value: string;
+}
+
+export type BirthrightContextOperator = 'ALL_OF' | 'ANY_OF' | 'NONE_OF';
+
+export interface BirthrightContextClause {
+  id: string;
+  operator: BirthrightContextOperator;
+  contextIds: string[];
+}
+
+export interface BirthrightGrant {
+  id: string;
+  kind: 'Business Role' | 'Entitlement' | 'Application Account' | 'License SKU';
+  name: string;
+  targetSystem: string;
+}
+
+export interface DemoBirthrightRule {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  scopeMode: BirthrightScopeMode;
+  combinator: 'ALL' | 'ANY';
+  attributeConditions: BirthrightAttributeCondition[];
+  contextClauses: BirthrightContextClause[];
+  grants: BirthrightGrant[];
+  provisioningMode: 'Auto-Provision' | 'Simulation Mode';
+  autoRevokeOnExit: boolean;
+  status: 'Active' | 'Paused';
+  owner: string;
+  lastEvaluated: string;
+}
+
+export const BIRTHRIGHT_ATTRIBUTE_OPTIONS: {
+  field: BirthrightAttributeField;
+  label: string;
+  sampleValues: string[];
+}[] = [
+  {
+    field: 'type',
+    label: 'Identity Type',
+    sampleValues: ['Employee', 'Contractor'],
+  },
+  {
+    field: 'contractType',
+    label: 'Contract Type',
+    sampleValues: ['Full-Time Permanent (FTE)', 'Fixed-Term External Contractor (90d)'],
+  },
+  {
+    field: 'department',
+    label: 'Department',
+    sampleValues: [
+      'Corporate Finance & Treasury',
+      'Global Revenue & Enterprise Sales',
+      'Platform & Cloud Engineering',
+      'Data Governance & Analytics',
+      'External Assurance & Contractors',
+    ],
+  },
+  {
+    field: 'companyName',
+    label: 'Legal Entity / Company',
+    sampleValues: [
+      'IDENTRA Global Holdings Ltd',
+      'IDENTRA North America Inc.',
+      'Vanguard External Assurance LLP',
+    ],
+  },
+  {
+    field: 'orgUnitName',
+    label: 'Org Unit',
+    sampleValues: [
+      'EMEA Finance Operations',
+      'EMEA Treasury & Payments',
+      'Enterprise Sales EMEA',
+      'Platform SRE & Cloud Infra',
+      'Enterprise Data Stewardship',
+      'External Contractors & Auditors',
+    ],
+  },
+  {
+    field: 'costCenterCode',
+    label: 'Cost Center',
+    sampleValues: ['CC-4100-FIN', 'CC-2200-REV', 'CC-3010-ENG', 'CC-3400-DAT', 'CC-9001-EXT'],
+  },
+  {
+    field: 'location',
+    label: 'Location',
+    sampleValues: ['London, UK (HQ)', 'New York, US', 'Zurich, CH', 'Remote (UK / B2B)'],
+  },
+  {
+    field: 'title',
+    label: 'Job Title',
+    sampleValues: [
+      'Financial Analyst',
+      'Enterprise Account Director',
+      'Treasury Operations Lead',
+      'Principal Platform Engineer',
+      'Head of Data Governance',
+      'External Cloud Auditor',
+    ],
+  },
+  {
+    field: 'jmlStatus',
+    label: 'JML Lifecycle Status',
+    sampleValues: ['Active', 'Joiner', 'Mover', 'Leaver', 'Suspended'],
+  },
+  {
+    field: 'sourceSystem',
+    label: 'Authoritative Source',
+    sampleValues: ['Workday HRIS Core', 'B2B Partner Lifecycle Portal'],
+  },
+];
+
+export function evaluateBirthrightForPerson(
+  rule: DemoBirthrightRule,
+  person: DemoPerson
+): boolean {
+  const attrResults = rule.attributeConditions.map((cond) => {
+    const raw = String(person[cond.field] ?? '').toLowerCase();
+    const expected = cond.value.trim().toLowerCase();
+    if (!expected) return true;
+    if (cond.operator === 'equals') return raw === expected;
+    if (cond.operator === 'not_equals') return raw !== expected;
+    return raw.includes(expected);
+  });
+
+  const ctxResults = rule.contextClauses
+    .filter((clause) => clause.contextIds.length > 0)
+    .map((clause) => {
+      const personContexts = new Set(person.contextRefIds);
+      if (clause.operator === 'ALL_OF') {
+        return clause.contextIds.every((id) => personContexts.has(id));
+      }
+      if (clause.operator === 'ANY_OF') {
+        return clause.contextIds.some((id) => personContexts.has(id));
+      }
+      return clause.contextIds.every((id) => !personContexts.has(id));
+    });
+
+  const allChecks = [...attrResults, ...ctxResults];
+  if (allChecks.length === 0) return false;
+  return rule.combinator === 'ALL'
+    ? allChecks.every(Boolean)
+    : allChecks.some(Boolean);
+}
+
+export function evaluateBirthrightMatches(
+  rule: DemoBirthrightRule,
+  people: DemoPerson[]
+): DemoPerson[] {
+  return people.filter((person) => evaluateBirthrightForPerson(rule, person));
+}
+
+export const INITIAL_DEMO_BIRTHRIGHTS: DemoBirthrightRule[] = [
+  {
+    id: 'br-001',
+    code: 'BR-001',
+    name: 'Global FTE Day-1 Enterprise Baseline',
+    description:
+      'Automatically provisions core SSO, Active Directory account, and Microsoft 365 E3 for all non-suspended permanent employees across IDENTRA legal entities.',
+    scopeMode: 'Identity Attributes',
+    combinator: 'ALL',
+    attributeConditions: [
+      { id: 'ac-1', field: 'type', operator: 'equals', value: 'Employee' },
+      { id: 'ac-2', field: 'companyName', operator: 'contains', value: 'IDENTRA' },
+      { id: 'ac-3', field: 'jmlStatus', operator: 'not_equals', value: 'Suspended' },
+    ],
+    contextClauses: [],
+    grants: [
+      { id: 'g-1', kind: 'Business Role', name: 'Corporate SSO Standard', targetSystem: 'Okta Workforce Cloud' },
+      { id: 'g-2', kind: 'Application Account', name: 'AD Standard User (OU=Users)', targetSystem: 'Active Directory' },
+      { id: 'g-3', kind: 'License SKU', name: 'Microsoft 365 E3 (SPE_E3)', targetSystem: 'Microsoft Entra ID' },
+    ],
+    provisioningMode: 'Auto-Provision',
+    autoRevokeOnExit: true,
+    status: 'Active',
+    owner: 'Identity Operations',
+    lastEvaluated: '2m ago',
+  },
+  {
+    id: 'br-002',
+    code: 'BR-002',
+    name: 'EMEA Finance Operations Context Birthright',
+    description:
+      'Grants read-only SAP S/4HANA general ledger access and Finance AD security groups whenever an identity holds the Primary Employment · Finance UK context.',
+    scopeMode: 'Single Context',
+    combinator: 'ALL',
+    attributeConditions: [],
+    contextClauses: [
+      { id: 'cc-1', operator: 'ALL_OF', contextIds: ['ctx-fin-uk-fte'] },
+    ],
+    grants: [
+      { id: 'g-4', kind: 'Business Role', name: 'Finance: Base Ledger Read', targetSystem: 'SAP S/4HANA Finance' },
+      { id: 'g-5', kind: 'Entitlement', name: 'SG-Finance-Ledger-Readers', targetSystem: 'Active Directory' },
+      { id: 'g-6', kind: 'Application Account', name: 'SAP Dialog User (Read-Only)', targetSystem: 'SAP S/4HANA Finance' },
+    ],
+    provisioningMode: 'Auto-Provision',
+    autoRevokeOnExit: true,
+    status: 'Active',
+    owner: 'Claire Vance',
+    lastEvaluated: '4m ago',
+  },
+  {
+    id: 'br-003',
+    code: 'BR-003',
+    name: 'Tier-0 Technical & Data Steward Security Pack',
+    description:
+      'Applies phishing-resistant FIDO2 authentication, GitHub Enterprise access, and Vault read-only audit telemetry to identities holding either SRE JIT or PII Stewardship contexts.',
+    scopeMode: 'Context Combination',
+    combinator: 'ALL',
+    attributeConditions: [],
+    contextClauses: [
+      { id: 'cc-2', operator: 'ANY_OF', contextIds: ['ctx-sre-jit', 'ctx-data-steward'] },
+      { id: 'cc-3', operator: 'NONE_OF', contextIds: ['ctx-ext-audit'] },
+    ],
+    grants: [
+      { id: 'g-7', kind: 'Entitlement', name: 'Okta FIDO2 Phishing-Resistant Policy', targetSystem: 'Okta Workforce Cloud' },
+      { id: 'g-8', kind: 'Application Account', name: 'GitHub Enterprise SSO Member', targetSystem: 'GitHub Enterprise' },
+      { id: 'g-9', kind: 'Entitlement', name: 'VAULT:AUDIT_TELEMETRY_READ', targetSystem: 'AWS Prod Vault' },
+    ],
+    provisioningMode: 'Auto-Provision',
+    autoRevokeOnExit: true,
+    status: 'Active',
+    owner: 'Alex Carter',
+    lastEvaluated: '1m ago',
+  },
+  {
+    id: 'br-004',
+    code: 'BR-004',
+    name: 'Dual-Context Treasury Transfer Quarantine',
+    description:
+      'Detects identities simultaneously holding both active Treasury Wire Signer and expired Legacy AP Ops contexts, applying temporary dual-control read-only guardrails until SoD is cleared.',
+    scopeMode: 'Context Combination',
+    combinator: 'ALL',
+    attributeConditions: [],
+    contextClauses: [
+      { id: 'cc-4', operator: 'ALL_OF', contextIds: ['ctx-treasury-emea', 'ctx-legacy-ap'] },
+    ],
+    grants: [
+      { id: 'g-10', kind: 'Entitlement', name: 'SOX-402 Dual-Control Review Hold', targetSystem: 'SAP S/4HANA Finance' },
+      { id: 'g-11', kind: 'Entitlement', name: 'Treasury Wire Approval Step-Up MFA', targetSystem: 'Okta Workforce Cloud' },
+    ],
+    provisioningMode: 'Simulation Mode',
+    autoRevokeOnExit: true,
+    status: 'Active',
+    owner: 'David Chen',
+    lastEvaluated: 'Just now',
+  },
+  {
+    id: 'br-005',
+    code: 'BR-005',
+    name: 'London HQ Finance M365 E5 & Analytics Uplift',
+    description:
+      'Combines location and cost center identity attributes with active EMEA Finance or Treasury contexts to automatically assign Microsoft 365 E5 compliance licensing.',
+    scopeMode: 'Hybrid (Attributes + Contexts)',
+    combinator: 'ALL',
+    attributeConditions: [
+      { id: 'ac-4', field: 'location', operator: 'equals', value: 'London, UK (HQ)' },
+      { id: 'ac-5', field: 'costCenterCode', operator: 'equals', value: 'CC-4100-FIN' },
+    ],
+    contextClauses: [
+      { id: 'cc-5', operator: 'ANY_OF', contextIds: ['ctx-fin-uk-fte', 'ctx-treasury-emea'] },
+    ],
+    grants: [
+      { id: 'g-12', kind: 'License SKU', name: 'Microsoft 365 E5 (SPE_E5)', targetSystem: 'Microsoft Entra ID' },
+      { id: 'g-13', kind: 'Entitlement', name: 'SAP:FIORI_ANALYTICS_VIEWER', targetSystem: 'SAP S/4HANA Finance' },
+    ],
+    provisioningMode: 'Auto-Provision',
+    autoRevokeOnExit: true,
+    status: 'Active',
+    owner: 'David Chen',
+    lastEvaluated: '3m ago',
+  },
+  {
+    id: 'br-006',
+    code: 'BR-006',
+    name: 'External B2B Contractor Restricted Sandbox',
+    description:
+      'Isolates external contractors sourced from the B2B Partner Lifecycle Portal into quarantined OU=Contractors with strict 90-day auto-expiry.',
+    scopeMode: 'Identity Attributes',
+    combinator: 'ALL',
+    attributeConditions: [
+      { id: 'ac-6', field: 'type', operator: 'equals', value: 'Contractor' },
+      { id: 'ac-7', field: 'sourceSystem', operator: 'equals', value: 'B2B Partner Lifecycle Portal' },
+    ],
+    contextClauses: [],
+    grants: [
+      { id: 'g-14', kind: 'Application Account', name: 'Entra B2B Guest (#EXT#)', targetSystem: 'Microsoft Entra ID' },
+      { id: 'g-15', kind: 'Entitlement', name: 'AD OU=Contractors Restricted Policy', targetSystem: 'Active Directory' },
+    ],
+    provisioningMode: 'Auto-Provision',
+    autoRevokeOnExit: true,
+    status: 'Active',
+    owner: 'Priya Nair',
+    lastEvaluated: '6m ago',
+  },
+];
+
+/* -------------------------------------------------------------------------- */
+/* Target Accounts & Orphaned Account Inventory (Reporting)                   */
+/* -------------------------------------------------------------------------- */
+
+export type AccountCorrelationState = 'Correlated' | 'Orphaned' | 'Disabled (Leaver)';
+
+export interface DemoTargetAccount {
+  id: string;
+  accountName: string;
+  application: string;
+  accountType: 'Human' | 'Contractor' | 'Service Account' | 'AI Agent' | 'API Token';
+  personId?: string;
+  correlatedIdentity: string | null;
+  correlationState: AccountCorrelationState;
+  accountStatus: 'Enabled' | 'Disabled' | 'Quarantined';
+  privileged: boolean;
+  lastLogin: string;
+  daysInactive: number;
+  orphanReason?: string;
+  riskScore: number;
+}
+
+export const INITIAL_DEMO_ACCOUNTS: DemoTargetAccount[] = [
+  {
+    id: 'acc-1',
+    accountName: 'smitchell@corp.identra.net',
+    application: 'Active Directory',
+    accountType: 'Human',
+    personId: 'p-sarah',
+    correlatedIdentity: 'Sarah Mitchell',
+    correlationState: 'Correlated',
+    accountStatus: 'Enabled',
+    privileged: false,
+    lastLogin: 'Today 10:28',
+    daysInactive: 0,
+    riskScore: 10,
+  },
+  {
+    id: 'acc-2',
+    accountName: 'SAP_SMITCHELL',
+    application: 'SAP S/4HANA Finance',
+    accountType: 'Human',
+    personId: 'p-sarah',
+    correlatedIdentity: 'Sarah Mitchell',
+    correlationState: 'Correlated',
+    accountStatus: 'Enabled',
+    privileged: false,
+    lastLogin: 'Today 10:31',
+    daysInactive: 0,
+    riskScore: 12,
+  },
+  {
+    id: 'acc-3',
+    accountName: 'jdavies@corp.identra.net',
+    application: 'Microsoft Entra ID',
+    accountType: 'Human',
+    personId: 'p-john',
+    correlatedIdentity: 'John Davies',
+    correlationState: 'Correlated',
+    accountStatus: 'Enabled',
+    privileged: false,
+    lastLogin: 'Today 09:50',
+    daysInactive: 0,
+    riskScore: 22,
+  },
+  {
+    id: 'acc-4',
+    accountName: 'SAP_EVANCE',
+    application: 'SAP S/4HANA Finance',
+    accountType: 'Human',
+    personId: 'p-elena',
+    correlatedIdentity: 'Elena Vance',
+    correlationState: 'Correlated',
+    accountStatus: 'Enabled',
+    privileged: true,
+    lastLogin: 'Today 08:40',
+    daysInactive: 0,
+    riskScore: 84,
+  },
+  {
+    id: 'acc-5',
+    accountName: 'pnair_jit@aws-prod',
+    application: 'AWS Prod Vault',
+    accountType: 'Human',
+    personId: 'p-priya',
+    correlatedIdentity: 'Priya Nair',
+    correlationState: 'Correlated',
+    accountStatus: 'Enabled',
+    privileged: true,
+    lastLogin: 'Yesterday 18:15',
+    daysInactive: 1,
+    riskScore: 18,
+  },
+  {
+    id: 'acc-6',
+    accountName: 'lmeyer_steward',
+    application: 'Snowflake PII Lake',
+    accountType: 'Human',
+    personId: 'p-lucas',
+    correlatedIdentity: 'Lucas Meyer',
+    correlationState: 'Correlated',
+    accountStatus: 'Enabled',
+    privileged: true,
+    lastLogin: 'Today 07:45',
+    daysInactive: 0,
+    riskScore: 19,
+  },
+  {
+    id: 'acc-7',
+    accountName: 'mwilson_ext',
+    application: 'Active Directory',
+    accountType: 'Contractor',
+    personId: 'p-mark',
+    correlatedIdentity: 'Mark Wilson',
+    correlationState: 'Disabled (Leaver)',
+    accountStatus: 'Disabled',
+    privileged: false,
+    lastLogin: '3 days ago',
+    daysInactive: 3,
+    riskScore: 8,
+  },
+  {
+    id: 'acc-8',
+    accountName: 'AKIA-MWILSON-PROD-09',
+    application: 'AWS Prod Vault',
+    accountType: 'Contractor',
+    personId: 'p-mark',
+    correlatedIdentity: 'Mark Wilson (Terminated)',
+    correlationState: 'Orphaned',
+    accountStatus: 'Enabled',
+    privileged: true,
+    lastLogin: 'Yesterday 22:14',
+    daysInactive: 1,
+    orphanReason: 'Contractor HR end date expired (2026-11-21); direct IAM access key left active.',
+    riskScore: 95,
+  },
+  {
+    id: 'acc-9',
+    accountName: 'adm_jhenderson',
+    application: 'Active Directory',
+    accountType: 'Contractor',
+    correlatedIdentity: null,
+    correlationState: 'Orphaned',
+    accountStatus: 'Enabled',
+    privileged: true,
+    lastLogin: '118 days ago',
+    daysInactive: 118,
+    orphanReason: 'Unmatched OU=Contractors account with no Workday employeeNumber (flagged in IMP-4104).',
+    riskScore: 91,
+  },
+  {
+    id: 'acc-10',
+    accountName: 'ext_kpatel_tmp',
+    application: 'Active Directory',
+    accountType: 'Contractor',
+    correlatedIdentity: null,
+    correlationState: 'Orphaned',
+    accountStatus: 'Enabled',
+    privileged: false,
+    lastLogin: '64 days ago',
+    daysInactive: 64,
+    orphanReason: 'Legacy vendor account without B2B sponsor or HRIS correlation record (IMP-4104).',
+    riskScore: 76,
+  },
+  {
+    id: 'acc-11',
+    accountName: 'SAP_BATCH_LEGACY04',
+    application: 'SAP S/4HANA Finance',
+    accountType: 'Service Account',
+    correlatedIdentity: null,
+    correlationState: 'Orphaned',
+    accountStatus: 'Enabled',
+    privileged: true,
+    lastLogin: '42 days ago',
+    daysInactive: 42,
+    orphanReason: 'Ownerless SAP batch user holding FI_POSTING privilege; original owner departed Q2.',
+    riskScore: 88,
+  },
+  {
+    id: 'acc-12',
+    accountName: 'api.legacy-billing-sync',
+    application: 'AWS Prod Vault',
+    accountType: 'API Token',
+    correlatedIdentity: null,
+    correlationState: 'Orphaned',
+    accountStatus: 'Enabled',
+    privileged: true,
+    lastLogin: 'Today 04:00',
+    daysInactive: 0,
+    orphanReason: 'Unassigned non-human API token with wildcard S3 + Secrets Read; unrotated for 194 days.',
+    riskScore: 92,
+  },
+  {
+    id: 'acc-13',
+    accountName: 'sf_bi_extract_old',
+    application: 'Snowflake PII Lake',
+    accountType: 'Service Account',
+    correlatedIdentity: null,
+    correlationState: 'Orphaned',
+    accountStatus: 'Enabled',
+    privileged: false,
+    lastLogin: '87 days ago',
+    daysInactive: 87,
+    orphanReason: 'Decommissioned BI connector account never linked to an accountable steward.',
+    riskScore: 72,
+  },
+  {
+    id: 'acc-14',
+    accountName: 'agent.release-copilot',
+    application: 'Snowflake PII Lake',
+    accountType: 'AI Agent',
+    correlatedIdentity: 'Priya Nair (Owner)',
+    correlationState: 'Correlated',
+    accountStatus: 'Enabled',
+    privileged: true,
+    lastLogin: 'Today 10:15',
+    daysInactive: 0,
+    riskScore: 88,
+  },
+  {
+    id: 'acc-15',
+    accountName: 'svc.finance-ledger-etl',
+    application: 'SAP S/4HANA Finance',
+    accountType: 'Service Account',
+    correlatedIdentity: 'Lucas Meyer (Owner)',
+    correlationState: 'Correlated',
+    accountStatus: 'Enabled',
+    privileged: false,
+    lastLogin: 'Today 06:00',
+    daysInactive: 0,
+    riskScore: 12,
   },
 ];
