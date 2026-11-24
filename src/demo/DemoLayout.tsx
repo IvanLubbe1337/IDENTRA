@@ -16,6 +16,7 @@ import {
   GitMerge,
   KeyRound,
   LayoutDashboard,
+  Mail,
   Menu,
   Play,
   RefreshCw,
@@ -51,6 +52,7 @@ import {
 } from '@/demo/views/AutomationViews';
 import { ProvisioningEngineView } from '@/demo/views/ProvisioningEngineView';
 import { ImportsView } from '@/demo/views/ImportsView';
+import { EmailNotificationsView } from '@/demo/views/EmailNotificationsView';
 import { cn } from '@/lib/cn';
 
 interface NavGroup {
@@ -104,6 +106,7 @@ const SIDEBAR_NAV: NavGroup[] = [
     items: [
       { id: 'provisioning-engine', label: 'Provisioning Engine', icon: Cpu },
       { id: 'imports', label: 'Imports', icon: DownloadCloud },
+      { id: 'email-notifications', label: 'Email Notifications', icon: Mail },
       { id: 'audit-log', label: 'Audit log', icon: BookOpen },
     ],
   },
@@ -156,6 +159,12 @@ export function DemoLayout() {
   const orphanedAccounts = useDemoStore(
     (s) => s.accounts.filter((a) => a.correlationState === 'Orphaned').length
   );
+  const failedEmails = useDemoStore(
+    (s) =>
+      s.emailNotifications.filter(
+        (e) => e.status === 'Bounced' || e.status === 'Failed'
+      ).length
+  );
 
   // Auto-dismiss live Process++ toast notifications
   useEffect(() => {
@@ -173,6 +182,7 @@ export function DemoLayout() {
     if (id === 'reporting' && orphanedAccounts > 0) return orphanedAccounts;
     if (id === 'provisioning-engine' && pendingProvisioning > 0) return pendingProvisioning;
     if (id === 'imports' && failedImports > 0) return failedImports;
+    if (id === 'email-notifications' && failedEmails > 0) return failedEmails;
     return null;
   };
 
@@ -208,6 +218,8 @@ export function DemoLayout() {
         return <ProvisioningEngineView />;
       case 'imports':
         return <ImportsView />;
+      case 'email-notifications':
+        return <EmailNotificationsView />;
       case 'audit-log':
         return <AuditLogView />;
     }

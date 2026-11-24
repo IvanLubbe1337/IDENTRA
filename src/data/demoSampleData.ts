@@ -14,6 +14,7 @@ export type DemoSectionId =
   | 'workflows'
   | 'provisioning-engine'
   | 'imports'
+  | 'email-notifications'
   | 'audit-log';
 
 export type ImportStatus = 'Completed' | 'Failed' | 'Completed with Warnings';
@@ -925,7 +926,7 @@ export const INITIAL_DEMO_ROLES: DemoRole[] = [
     name: 'Treasury: Payment Approver',
     department: 'Finance',
     description:
-      'Authorized Treasury approvers permitted to release outbound supplier wire batches and dual-sign payments above $50k.',
+      'Authorized Treasury approvers permitted to release outbound supplier wire batches and dual-sign payments above R50k.',
     members: 18,
     entitlementsCount: 9,
     owner: 'Treasury Director',
@@ -968,7 +969,7 @@ export const INITIAL_DEMO_ROLES: DemoRole[] = [
     entitlementList: [
       {
         id: 're-pay-1',
-        name: 'SAP: Approve & Release Wire >$50k',
+        name: 'SAP: Approve & Release Wire >R50k',
         application: 'SAP S/4HANA Finance',
         type: 'SAP Role',
         technicalId: 'SAP_ROLE: Z_TR_PAYMENT_APPROVER',
@@ -1315,7 +1316,7 @@ export const INITIAL_DEMO_REVIEWS: DemoReviewItem[] = [
     workflowCode: 'WF-REV-MGR-01',
     triggeredBy: 'Scheduled Quarterly SaaS License Optimization Review',
     triggeredAt: '2026-11-23 07:00',
-    escalationPolicy: 'Auto-downgrade to M365 E3 after 10d SLA ($21/mo savings)',
+    escalationPolicy: 'Auto-downgrade to M365 E3 after 10d SLA (R385/mo savings)',
     workflowStages: [
       { step: 'Stage 1', approverRole: 'Line Manager Approval', assignee: 'Marcus Bell', status: 'Active' },
     ],
@@ -1345,7 +1346,7 @@ export const INITIAL_DEMO_REVIEWS: DemoReviewItem[] = [
     },
     risk: 'Medium',
     usageSignal: 'E5 features (PowerBI Pro / Audio Conf) unused 118 days',
-    monthlyCost: '$57/mo',
+    monthlyCost: 'R1,050/mo',
     aiRecommendation: 'Revoke',
     reason: 'Zero E5-tier workload activity in 4 months; reclaim E5 license and downgrade to M365 E3.',
     decision: 'Pending',
@@ -1395,7 +1396,7 @@ export const INITIAL_DEMO_REVIEWS: DemoReviewItem[] = [
     },
     risk: 'Medium',
     usageSignal: '0 PIM activations or Identity Protection reviews in 180 days',
-    monthlyCost: '$9/mo',
+    monthlyCost: 'R165/mo',
     aiRecommendation: 'Revoke',
     reason: 'Non-privileged marketing user holding Entra ID P2 add-on with no PIM role eligibility.',
     decision: 'Pending',
@@ -1445,7 +1446,7 @@ export const INITIAL_DEMO_REVIEWS: DemoReviewItem[] = [
     },
     risk: 'Low',
     usageSignal: 'Active 24 of last 30 days (Excel + Teams)',
-    monthlyCost: '$30/mo',
+    monthlyCost: 'R550/mo',
     aiRecommendation: 'Approve',
     reason: 'High daily adoption matching approved Finance Leadership role allocation.',
     decision: 'Pending',
@@ -2669,5 +2670,486 @@ export const INITIAL_DEMO_ACCOUNTS: DemoTargetAccount[] = [
     lastLogin: 'Today 06:00',
     daysInactive: 0,
     riskScore: 12,
+  },
+];
+
+/* -------------------------------------------------------------------------- */
+/* Email Notification Logs & Branded HTML Email Templates                     */
+/* -------------------------------------------------------------------------- */
+
+export type EmailDeliveryStatus = 'Delivered' | 'Queued' | 'Bounced' | 'Failed';
+export type EmailTriggerCategory =
+  | 'JML Lifecycle'
+  | 'Access Review'
+  | 'SoD & Policy'
+  | 'Birthright'
+  | 'Operations';
+
+export interface DemoEmailNotification {
+  id: string;
+  messageCode: string;
+  timestamp: string;
+  status: EmailDeliveryStatus;
+  trigger: string;
+  triggerCategory: EmailTriggerCategory;
+  recipientName: string;
+  recipientEmail: string;
+  recipientRole: string;
+  cc?: string[];
+  from: string;
+  subject: string;
+  smtpProvider: string;
+  deliveryLatencyMs: number | null;
+  errorMessage?: string;
+  htmlBody: string;
+}
+
+export interface BrandedEmailTemplateInput {
+  badgeText: string;
+  badgeTone: 'sky' | 'emerald' | 'amber' | 'rose';
+  headline: string;
+  greeting: string;
+  intro: string;
+  metadataRows: { label: string; value: string; mono?: boolean }[];
+  calloutTitle?: string;
+  calloutText?: string;
+  ctaLabel: string;
+  ctaUrl: string;
+  secondaryNote?: string;
+  messageCode: string;
+  timestamp: string;
+}
+
+export function buildBrandedIdentraEmailHtml(input: BrandedEmailTemplateInput): string {
+  const tonePalette = {
+    sky: { bg: '#E0F2FE', border: '#BAE6FD', text: '#0369A1', accent: '#0EA5E9' },
+    emerald: { bg: '#DCFCE7', border: '#BBF7D0', text: '#047857', accent: '#10B981' },
+    amber: { bg: '#FEF3C7', border: '#FDE68A', text: '#B45309', accent: '#F59E0B' },
+    rose: { bg: '#FFE4E6', border: '#FECDD3', text: '#BE123C', accent: '#E11D48' },
+  }[input.badgeTone];
+
+  const rowsHtml = input.metadataRows
+    .map(
+      (row) => `
+                <tr>
+                  <td style="padding:10px 14px;border-bottom:1px solid #E2E8F0;font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#64748B;width:36%;font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;">
+                    ${row.label}
+                  </td>
+                  <td style="padding:10px 14px;border-bottom:1px solid #E2E8F0;font-size:13px;font-weight:600;color:#0F172A;${
+                    row.mono
+                      ? "font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;"
+                      : "font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;"
+                  }">
+                    ${row.value}
+                  </td>
+                </tr>`
+    )
+    .join('');
+
+  const calloutHtml =
+    input.calloutTitle && input.calloutText
+      ? `
+              <div style="margin-top:20px;padding:14px 16px;border-radius:12px;background-color:${tonePalette.bg};border:1px solid ${tonePalette.border};">
+                <div style="font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:${tonePalette.text};font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;">
+                  ${input.calloutTitle}
+                </div>
+                <p style="margin:6px 0 0 0;font-size:13px;line-height:1.55;color:#1E293B;">
+                  ${input.calloutText}
+                </p>
+              </div>`
+      : '';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${input.headline} — IDENTRA IGA Suite</title>
+  </head>
+  <body style="margin:0;padding:0;background-color:#F1F5F9;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0F172A;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#F1F5F9;padding:28px 14px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background-color:#FFFFFF;border-radius:18px;overflow:hidden;border:1px solid #E2E8F0;box-shadow:0 10px 30px rgba(15,23,42,0.06);">
+            <!-- IDENTRA Brand Header -->
+            <tr>
+              <td style="background:linear-gradient(135deg,#0F172A 0%,#1E293B 60%,#0C4A6E 100%);padding:22px 28px;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                  <tr>
+                    <td style="vertical-align:middle;">
+                      <table role="presentation" cellspacing="0" cellpadding="0">
+                        <tr>
+                          <td style="vertical-align:middle;padding-right:10px;">
+                            <svg width="28" height="28" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M20 4L6 34H13.2L20 18.8V4Z" fill="#38BDF8" />
+                              <path d="M20 4L34 34H26.6L20 18.8V4Z" fill="#2563EB" />
+                              <path d="M14.8 26.2L20 22.8L25.2 26.2L22.5 29.6H17.5L14.8 26.2Z" fill="#0EA5E9" />
+                            </svg>
+                          </td>
+                          <td style="vertical-align:middle;">
+                            <div style="font-size:15px;font-weight:800;letter-spacing:0.18em;color:#FFFFFF;line-height:1.1;">IDENTRA</div>
+                            <div style="font-size:10px;font-weight:600;letter-spacing:0.12em;color:#7DD3FC;text-transform:uppercase;margin-top:2px;font-family:'JetBrains Mono',ui-monospace,monospace;">IGA SUITE · IDENTITY PROCESS++</div>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                    <td align="right" style="vertical-align:middle;">
+                      <span style="display:inline-block;padding:4px 10px;border-radius:999px;background-color:rgba(14,165,233,0.18);border:1px solid rgba(125,211,252,0.35);color:#E0F2FE;font-size:10px;font-weight:700;letter-spacing:0.08em;font-family:'JetBrains Mono',ui-monospace,monospace;">
+                        ${input.messageCode}
+                      </span>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Accent Strip -->
+            <tr>
+              <td style="height:4px;background-color:${tonePalette.accent};font-size:0;line-height:0;">&nbsp;</td>
+            </tr>
+
+            <!-- Body Content -->
+            <tr>
+              <td style="padding:28px;">
+                <span style="display:inline-block;padding:4px 11px;border-radius:999px;background-color:${tonePalette.bg};border:1px solid ${tonePalette.border};color:${tonePalette.text};font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;font-family:'JetBrains Mono',ui-monospace,monospace;">
+                  ${input.badgeText}
+                </span>
+
+                <h1 style="margin:14px 0 8px 0;font-size:21px;font-weight:800;line-height:1.3;color:#0F172A;letter-spacing:-0.01em;">
+                  ${input.headline}
+                </h1>
+
+                <p style="margin:0 0 10px 0;font-size:14px;line-height:1.6;color:#334155;">
+                  ${input.greeting}
+                </p>
+                <p style="margin:0 0 20px 0;font-size:14px;line-height:1.6;color:#475569;">
+                  ${input.intro}
+                </p>
+
+                <!-- Structured Metadata Table -->
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden;background-color:#F8FAFC;">
+                  ${rowsHtml}
+                </table>
+
+                ${calloutHtml}
+
+                <!-- Primary Action CTA -->
+                <table role="presentation" cellspacing="0" cellpadding="0" style="margin-top:24px;">
+                  <tr>
+                    <td style="border-radius:10px;background-color:#0EA5E9;">
+                      <a href="${input.ctaUrl}" style="display:inline-block;padding:12px 22px;font-size:13px;font-weight:700;color:#FFFFFF;text-decoration:none;letter-spacing:0.01em;">
+                        ${input.ctaLabel} &rarr;
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+
+                ${
+                  input.secondaryNote
+                    ? `<p style="margin:18px 0 0 0;font-size:12px;line-height:1.55;color:#64748B;">${input.secondaryNote}</p>`
+                    : ''
+                }
+              </td>
+            </tr>
+
+            <!-- Governance Audit Footer -->
+            <tr>
+              <td style="background-color:#F8FAFC;border-top:1px solid #E2E8F0;padding:18px 28px;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                  <tr>
+                    <td style="font-size:11px;line-height:1.5;color:#64748B;">
+                      <strong style="color:#0F172A;">IDENTRA Autonomous IGA</strong> · Automated Governance Notification<br />
+                      Dispatched ${input.timestamp} UTC · Correlation ID <span style="font-family:'JetBrains Mono',ui-monospace,monospace;color:#0284C7;">${input.messageCode}</span>
+                    </td>
+                    <td align="right" style="font-size:10px;color:#94A3B8;font-family:'JetBrains Mono',ui-monospace,monospace;">
+                      TLS 1.3 · DKIM Signed
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+}
+
+export const INITIAL_EMAIL_NOTIFICATIONS: DemoEmailNotification[] = [
+  {
+    id: 'eml-7048',
+    messageCode: 'EML-7048',
+    timestamp: '2026-11-24 10:24:19',
+    status: 'Delivered',
+    trigger: 'Day-1 HRIS Joiner Onboarding · Birthright BR-002',
+    triggerCategory: 'JML Lifecycle',
+    recipientName: 'Sarah Mitchell',
+    recipientEmail: 'sarah.mitchell@identra-corp.io',
+    recipientRole: 'New Joiner (Financial Analyst)',
+    cc: ['claire.vance@identra-corp.io'],
+    from: 'IDENTRA Identity Notifications <no-reply@identra-corp.io>',
+    subject: 'Welcome to IDENTRA — Your Day-1 Accounts & Finance Access Are Ready',
+    smtpProvider: 'Microsoft 365 Graph Mail · TLS 1.3',
+    deliveryLatencyMs: 284,
+    htmlBody: buildBrandedIdentraEmailHtml({
+      badgeText: 'DAY-1 JOINER PROVISIONED',
+      badgeTone: 'emerald',
+      headline: 'Your Day-1 Identity & Finance Access Are Ready',
+      greeting: 'Hi Sarah Mitchell,',
+      intro:
+        'Welcome to IDENTRA Global Holdings Ltd. Based on your authoritative Workday HRIS record and Primary Employment · Finance UK context (CTX-EMP-FIN-UK), your Day-1 birthright accounts and business roles have been provisioned automatically.',
+      metadataRows: [
+        { label: 'Employee #', value: 'EMP-10841', mono: true },
+        { label: 'Corporate UPN', value: 'smitchell@corp.identra.net', mono: true },
+        { label: 'Birthright Policy', value: 'BR-001 + BR-002 (EMEA Finance Operations)', mono: true },
+        { label: 'Provisioned Roles', value: 'Finance: Base Ledger Read · Corporate SSO Standard' },
+        { label: 'AD Security Group', value: 'SG-Finance-Ledger-Readers', mono: true },
+        { label: 'Line Manager', value: 'Claire Vance (Finance Operations Manager)' },
+      ],
+      calloutTitle: 'First Sign-In Security Requirement',
+      calloutText:
+        'Please enroll your phishing-resistant FIDO2 passkey or Microsoft Authenticator within 24 hours to activate SSO across SAP S/4HANA and Microsoft 365.',
+      ctaLabel: 'Activate Corporate SSO',
+      ctaUrl: 'https://identra-two.vercel.app/#demo',
+      secondaryNote:
+        'Need additional application access? Submit a self-service request in the IDENTRA Access Portal — Preventative SoD checks run automatically.',
+      messageCode: 'EML-7048',
+      timestamp: '2026-11-24 10:24:19',
+    }),
+  },
+  {
+    id: 'eml-7047',
+    messageCode: 'EML-7047',
+    timestamp: '2026-11-24 09:47:12',
+    status: 'Delivered',
+    trigger: 'Access Review Triggered · Manager Approval (WF-REV-MGR-01)',
+    triggerCategory: 'Access Review',
+    recipientName: 'Marcus Bell',
+    recipientEmail: 'marcus.bell@identra-corp.io',
+    recipientRole: 'Line Manager (VP Enterprise Sales)',
+    from: 'IDENTRA Identity Notifications <no-reply@identra-corp.io>',
+    subject: 'Action Required: Certify M365 E5 License & Privileged Access for Your Team',
+    smtpProvider: 'Microsoft 365 Graph Mail · TLS 1.3',
+    deliveryLatencyMs: 318,
+    htmlBody: buildBrandedIdentraEmailHtml({
+      badgeText: 'ACCESS REVIEW · MANAGER APPROVAL',
+      badgeTone: 'sky',
+      headline: 'Quarterly Access & License Review Assigned to You',
+      greeting: 'Hi Marcus Bell,',
+      intro:
+        'You have been assigned as the certifying reviewer under workflow WF-REV-MGR-01 (Manager Approval) for the Q4 Enterprise Access & License Certification Campaign. Process++ usage analytics identified an unused Microsoft 365 E5 license eligible for reclamation.',
+      metadataRows: [
+        { label: 'Selected Workflow', value: 'Manager Approval (WF-REV-MGR-01)', mono: true },
+        { label: 'Subject Identity', value: 'John Davies · Enterprise Account Director' },
+        { label: 'Item Under Review', value: 'Microsoft 365 E5 (Full Suite) — R1,050/mo' },
+        { label: 'Target System', value: 'Microsoft Entra ID (SKU: SPE_E5)', mono: true },
+        { label: 'AI Usage Signal', value: '0 E5 workload activations in 118 days · Recommend Revoke' },
+        { label: 'Certification SLA', value: '10 days remaining (Auto-downgrade to E3 on expiry)' },
+      ],
+      calloutTitle: 'Cost Optimization Opportunity',
+      calloutText:
+        'Revoking the unused E5 add-on and downgrading to M365 E3 preserves full Salesforce and Teams productivity while saving R4,620/year on CC-2200-REV.',
+      ctaLabel: 'Open Access Review Task',
+      ctaUrl: 'https://identra-two.vercel.app/#demo',
+      secondaryNote:
+        'All certification decisions are cryptographically sealed into the IDENTRA SOX/ISO 27001 audit trail.',
+      messageCode: 'EML-7047',
+      timestamp: '2026-11-24 09:47:12',
+    }),
+  },
+  {
+    id: 'eml-7046',
+    messageCode: 'EML-7046',
+    timestamp: '2026-11-24 09:05:44',
+    status: 'Delivered',
+    trigger: 'Shadow AI Agent Drift Alert · Policy NHI-AI-209',
+    triggerCategory: 'SoD & Policy',
+    recipientName: 'Lucas Meyer',
+    recipientEmail: 'lucas.meyer@identra-corp.io',
+    recipientRole: 'Data Owner (Head of Data Governance)',
+    cc: ['secops@identra-corp.io', 'priya.nair@identra-corp.io'],
+    from: 'IDENTRA Security & Governance <no-reply@identra-corp.io>',
+    subject: '[CRITICAL] Shadow AI Agent Grant Detected on Snowflake PROD_PII',
+    smtpProvider: 'Microsoft 365 Graph Mail · TLS 1.3',
+    deliveryLatencyMs: 196,
+    htmlBody: buildBrandedIdentraEmailHtml({
+      badgeText: 'CRITICAL · NHI-AI-209 VIOLATION',
+      badgeTone: 'rose',
+      headline: 'Unattested AI Agent Acquired Raw PII Read Access',
+      greeting: 'Attention Lucas Meyer,',
+      intro:
+        'IDENTRA continuous reconciliation detected an out-of-band direct privilege grant on Snowflake PII Lake for autonomous agent agent.release-copilot. A Data Owner & SecOps review workflow (WF-REV-AI-07) has been triggered immediately.',
+      metadataRows: [
+        { label: 'Non-Human Identity', value: 'agent.release-copilot (AI Agent · MCP)', mono: true },
+        { label: 'Policy Violated', value: 'NHI-AI-209 · AI Agent Raw PII Isolation', mono: true },
+        { label: 'Detected Grant', value: 'SNOWFLAKE:RAW_PII_SELECT (PROD_PII.*)', mono: true },
+        { label: 'Selected Workflow', value: 'Data Owner & SecOps Approval (WF-REV-AI-07)' },
+        { label: 'Observed Activity', value: '42 unmasked queries in last 24h (Outside CI/CD)' },
+        { label: 'Accountable Owner', value: 'Priya Nair · Principal Platform Engineer' },
+      ],
+      calloutTitle: 'Automatic Containment SLA: 12 Hours',
+      calloutText:
+        'If not explicitly approved with an exception ticket within 12 hours, IDENTRA will automatically revoke SELECT_PII and revert agent.release-copilot to Scoped Least-Privilege Read.',
+      ctaLabel: 'Contain Shadow AI Agent',
+      ctaUrl: 'https://identra-two.vercel.app/#demo',
+      secondaryNote:
+        'Triggered by Identity Process++ Domain 06 (Non-Human Governance) & GDPR Art. 32 enforcement.',
+      messageCode: 'EML-7046',
+      timestamp: '2026-11-24 09:05:44',
+    }),
+  },
+  {
+    id: 'eml-7045',
+    messageCode: 'EML-7045',
+    timestamp: '2026-11-24 08:33:08',
+    status: 'Bounced',
+    trigger: 'Contractor Off-board Confirmation · Mark Wilson (B2B Expiry)',
+    triggerCategory: 'JML Lifecycle',
+    recipientName: 'Mark Wilson',
+    recipientEmail: 'mark.wilson@ext-audit.io',
+    recipientRole: 'External Contractor (Terminated)',
+    cc: ['priya.nair@identra-corp.io'],
+    from: 'IDENTRA Identity Notifications <no-reply@identra-corp.io>',
+    subject: 'Access Termination Notice — Vanguard External Assurance Q4 Engagement',
+    smtpProvider: 'SendGrid Enterprise Relay · TLS 1.3',
+    deliveryLatencyMs: null,
+    errorMessage:
+      'SMTP 550 5.1.1 Mailbox unavailable on ext-audit.io — delivery automatically escalated to Sponsor Priya Nair (priya.nair@identra-corp.io).',
+    htmlBody: buildBrandedIdentraEmailHtml({
+      badgeText: 'CONTRACTOR OFF-BOARD NOTICE',
+      badgeTone: 'amber',
+      headline: 'Engagement Access Deactivated & Credentials Revoked',
+      greeting: 'Hello Mark Wilson,',
+      intro:
+        'Your fixed-term engagement with IDENTRA Global Holdings Ltd concluded on 2026-11-21. In accordance with policy JML-OFF-001, your federated Active Directory account has been disabled and moved to OU=DisabledUsers.',
+      metadataRows: [
+        { label: 'Contractor ID', value: 'CTR-90114 · Vanguard External Assurance LLP', mono: true },
+        { label: 'Contract End Date', value: '2026-11-21 (Expired)', mono: true },
+        { label: 'AD Account Action', value: 'Disabled & moved to OU=DisabledUsers', mono: true },
+        { label: 'Orphaned Key Flag', value: 'AKIA-MWILSON-PROD-09 queued for revocation', mono: true },
+        { label: 'Internal Sponsor', value: 'Priya Nair (priya.nair@identra-corp.io)' },
+      ],
+      calloutTitle: 'Orphaned Privileged Key Escalation',
+      calloutText:
+        'An active direct AWS Prod Vault access key and AD group SG-AWS-Prod-Vault-Admins were flagged during reconciliation. An Entitlement Owner review (WF-REV-ENT-04) has been dispatched to Priya Nair.',
+      ctaLabel: 'View Off-board Audit Record',
+      ctaUrl: 'https://identra-two.vercel.app/#demo',
+      secondaryNote:
+        'If an engagement extension has been approved, your sponsor must update the B2B Partner Lifecycle Portal.',
+      messageCode: 'EML-7045',
+      timestamp: '2026-11-24 08:33:08',
+    }),
+  },
+  {
+    id: 'eml-7044',
+    messageCode: 'EML-7044',
+    timestamp: '2026-11-24 08:16:02',
+    status: 'Delivered',
+    trigger: 'SOX-SOD-402 Toxic Combination Alert · Mover Transfer',
+    triggerCategory: 'SoD & Policy',
+    recipientName: 'David Chen',
+    recipientEmail: 'david.chen@identra-corp.io',
+    recipientRole: 'SOX Control Owner (Treasury Director)',
+    cc: ['controller-office@identra-corp.io'],
+    from: 'IDENTRA Security & Governance <no-reply@identra-corp.io>',
+    subject: '[SOX-402 BREACH] Toxic Role Conflict Detected for Elena Vance',
+    smtpProvider: 'Microsoft 365 Graph Mail · TLS 1.3',
+    deliveryLatencyMs: 241,
+    htmlBody: buildBrandedIdentraEmailHtml({
+      badgeText: 'SOX-SOD-402 VIOLATION · 48H SLA',
+      badgeTone: 'rose',
+      headline: 'Segregation of Duties Breach Requires Remediation',
+      greeting: 'Hi David Chen,',
+      intro:
+        'Following Elena Vance’s transfer into EMEA Treasury & Payments, her legacy Accounts Payable role remained active alongside her new wire approval authority. Review workflow WF-REV-SOX-09 (SOX Control Owner Approval) has been opened.',
+      metadataRows: [
+        { label: 'Identity', value: 'Elena Vance (EMP-10219) · Treasury Operations Lead' },
+        { label: 'Policy Code', value: 'SOX-SOD-402 · Forbid Vendor Create + Wire Approve', mono: true },
+        { label: 'Conflicting Pair', value: 'Finance: AP-Clerk (Legacy) ∧ Treasury: Payment Approver' },
+        { label: 'Selected Workflow', value: 'SOX Control Owner Approval (WF-REV-SOX-09)', mono: true },
+        { label: 'Target Application', value: 'SAP S/4HANA Finance (Z_FI_AP_VENDOR_CREATE)', mono: true },
+        { label: 'Recommended Fix', value: 'Auto-strip Finance: AP-Clerk & retire CTX-FIN-AP-LEGACY' },
+      ],
+      calloutTitle: 'Dual-Context Quarantine Active (BR-004)',
+      calloutText:
+        'Birthright rule BR-004 detected overlap between CTX-FIN-TREASURY and CTX-FIN-AP-LEGACY and placed wire approvals in step-up MFA hold until the legacy AP role is revoked.',
+      ctaLabel: 'Auto-Mitigate SOX Breach',
+      ctaUrl: 'https://identra-two.vercel.app/#demo',
+      secondaryNote:
+        'Unresolved SOX-402 violations automatically escalate to the Controller Office after 48 hours.',
+      messageCode: 'EML-7044',
+      timestamp: '2026-11-24 08:16:02',
+    }),
+  },
+  {
+    id: 'eml-7043',
+    messageCode: 'EML-7043',
+    timestamp: '2026-11-24 08:00:19',
+    status: 'Delivered',
+    trigger: 'Scheduled Connector Import Failed · Microsoft Entra ID (IMP-4108)',
+    triggerCategory: 'Operations',
+    recipientName: 'Identity Platform Ops',
+    recipientEmail: 'iam-ops@identra-corp.io',
+    recipientRole: 'Operations On-Call Distribution',
+    from: 'IDENTRA Operations Monitor <no-reply@identra-corp.io>',
+    subject: '[ALERT] Entra ID Delta Import IMP-4108 Failed (HTTP 401 Graph Token)',
+    smtpProvider: 'Microsoft 365 Graph Mail · TLS 1.3',
+    deliveryLatencyMs: 175,
+    htmlBody: buildBrandedIdentraEmailHtml({
+      badgeText: 'CONNECTOR IMPORT FAILURE',
+      badgeTone: 'amber',
+      headline: 'Scheduled Delta Import IMP-4108 Aborted Cleanly',
+      greeting: 'Hello Identity Platform Ops,',
+      intro:
+        'The scheduled Microsoft Entra ID delta import failed during Stage 2 (Extract Users & Licenses) due to an expired Graph API client secret. IDENTRA rolled back the staged delta automatically to protect desired-state graph parity.',
+      metadataRows: [
+        { label: 'Import Run Code', value: 'IMP-4108 (Scheduled Delta)', mono: true },
+        { label: 'Connector', value: 'Microsoft Graph API v1.0', mono: true },
+        { label: 'Error Code', value: 'HTTP 401 · AADSTS7000215 (Invalid Client Secret)', mono: true },
+        { label: 'Graph Integrity', value: 'Protected · Staged delta rolled back cleanly' },
+        { label: 'Recommended Fix', value: 'Rotate Managed Identity credential & retry IMP-4108' },
+      ],
+      calloutTitle: '1-Click Recovery Available',
+      calloutText:
+        'Navigate to Operations → Imports and select Retry with Refreshed Credential to restore 100% Entra ID license synchronization.',
+      ctaLabel: 'Open Import Diagnostics',
+      ctaUrl: 'https://identra-two.vercel.app/#demo',
+      messageCode: 'EML-7043',
+      timestamp: '2026-11-24 08:00:19',
+    }),
+  },
+  {
+    id: 'eml-7042',
+    messageCode: 'EML-7042',
+    timestamp: '2026-11-24 07:45:05',
+    status: 'Queued',
+    trigger: 'Birthright Evaluation · BR-005 (London HQ Finance M365 E5 Uplift)',
+    triggerCategory: 'Birthright',
+    recipientName: 'Claire Vance',
+    recipientEmail: 'claire.vance@identra-corp.io',
+    recipientRole: 'Finance Operations Manager',
+    from: 'IDENTRA Identity Notifications <no-reply@identra-corp.io>',
+    subject: 'Birthright Summary: 2 Identities Matched BR-005 (M365 E5 & SAP Fiori)',
+    smtpProvider: 'Microsoft 365 Graph Mail · TLS 1.3',
+    deliveryLatencyMs: null,
+    htmlBody: buildBrandedIdentraEmailHtml({
+      badgeText: 'BIRTHRIGHT POLICY DIGEST',
+      badgeTone: 'sky',
+      headline: 'Hybrid Birthright Rule BR-005 Evaluated Successfully',
+      greeting: 'Hi Claire Vance,',
+      intro:
+        'Hybrid birthright policy BR-005 (Location = London HQ ∧ Cost Center = CC-4100-FIN ∧ Context ∈ {CTX-EMP-FIN-UK, CTX-FIN-TREASURY}) evaluated cleanly against the live workforce graph.',
+      metadataRows: [
+        { label: 'Policy Code', value: 'BR-005 · Hybrid (Attributes + Contexts)', mono: true },
+        { label: 'Matched Identities', value: 'Sarah Mitchell (EMP-10841), Elena Vance (EMP-10219)' },
+        { label: 'Granted Access', value: 'Microsoft 365 E5 (SPE_E5) · SAP:FIORI_ANALYTICS_VIEWER' },
+        { label: 'Provisioning Mode', value: 'Auto-Provision · Auto-Revoke on Exit Enabled' },
+      ],
+      ctaLabel: 'Inspect Birthright Policy',
+      ctaUrl: 'https://identra-two.vercel.app/#demo',
+      messageCode: 'EML-7042',
+      timestamp: '2026-11-24 07:45:05',
+    }),
   },
 ];

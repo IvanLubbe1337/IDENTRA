@@ -10,12 +10,15 @@ import {
   INITIAL_DEMO_POLICIES,
   INITIAL_DEMO_REVIEWS,
   INITIAL_DEMO_ROLES,
+  INITIAL_EMAIL_NOTIFICATIONS,
   INITIAL_IMPORT_RUNS,
   INITIAL_PROVISIONING_JOBS,
+  buildBrandedIdentraEmailHtml,
   evaluateBirthrightMatches,
   type DemoApplication,
   type DemoAuditEntry,
   type DemoBirthrightRule,
+  type DemoEmailNotification,
   type DemoEntitlement,
   type DemoImportRun,
   type DemoNonHuman,
@@ -50,12 +53,17 @@ interface DemoStore {
   policies: DemoPolicy[];
   provisioningJobs: DemoProvisioningJob[];
   importRuns: DemoImportRun[];
+  emailNotifications: DemoEmailNotification[];
   auditLog: DemoAuditEntry[];
 
   setActiveSection: (section: DemoSectionId) => void;
   setSearchQuery: (q: string) => void;
   setSelectedPersonId: (id: string | null) => void;
   clearToast: () => void;
+
+  // Email Notification Log actions
+  retryEmailNotification: (emailId: string) => void;
+  resendEmailNotification: (emailId: string) => void;
 
   // Birthright Engine actions
   toggleBirthrightStatus: (ruleId: string) => void;
@@ -118,12 +126,90 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
   policies: INITIAL_DEMO_POLICIES,
   provisioningJobs: INITIAL_PROVISIONING_JOBS,
   importRuns: INITIAL_IMPORT_RUNS,
+  emailNotifications: INITIAL_EMAIL_NOTIFICATIONS,
   auditLog: INITIAL_DEMO_AUDIT,
 
   setActiveSection: (section) => set({ activeSection: section }),
   setSearchQuery: (q) => set({ searchQuery: q }),
   setSelectedPersonId: (id) => set({ selectedPersonId: id }),
   clearToast: () => set({ toastMessage: null }),
+
+  retryEmailNotification: (emailId) => {
+    const email = get().emailNotifications.find((e) => e.id === emailId);
+    if (!email) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const stamp = timeNow();
+    const targetEmail =
+      email.status === 'Bounced' && email.cc?.[0] ? email.cc[0] : email.recipientEmail;
+    const targetName =
+      email.status === 'Bounced' && email.cc?.[0]
+        ? `${email.recipientName} (Rerouted → Sponsor)`
+        : email.recipientName;
+
+    set((s) => ({
+      emailNotifications: s.emailNotifications.map((e) =>
+        e.id === emailId
+          ? {
+              ...e,
+              status: 'Delivered',
+              timestamp: `${today} ${stamp}`,
+              recipientEmail: targetEmail,
+              recipientName: targetName,
+              deliveryLatencyMs: 210 + Math.floor(Math.random() * 90),
+              errorMessage: undefined,
+            }
+          : e
+      ),
+      toastMessage: `Retried ${email.messageCode}: delivered cleanly to ${targetEmail}.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'Notification Engine',
+          processTag: 'EMAIL-OK',
+          tone: 'emerald',
+          action: `Retried & delivered ${email.messageCode} (${email.triggerCategory})`,
+          target: targetEmail,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  resendEmailNotification: (emailId) => {
+    const email = get().emailNotifications.find((e) => e.id === emailId);
+    if (!email) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const stamp = timeNow();
+    const nextCode = `EML-${7049 + get().emailNotifications.length}`;
+    const copy: DemoEmailNotification = {
+      ...email,
+      id: `eml-resend-${Date.now()}`,
+      messageCode: nextCode,
+      timestamp: `${today} ${stamp}`,
+      status: 'Delivered',
+      deliveryLatencyMs: 195 + Math.floor(Math.random() * 85),
+      errorMessage: undefined,
+      htmlBody: email.htmlBody.replaceAll(email.messageCode, nextCode),
+    };
+
+    set((s) => ({
+      emailNotifications: [copy, ...s.emailNotifications],
+      toastMessage: `Dispatched fresh branded email ${nextCode} to ${email.recipientEmail}.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'Notification Engine',
+          processTag: 'EMAIL-SENT',
+          tone: 'sky',
+          action: `Resent notification ${nextCode} (copy of ${email.messageCode})`,
+          target: email.recipientEmail,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
 
   toggleBirthrightStatus: (ruleId) => {
     const rule = get().birthrights.find((b) => b.id === ruleId);
@@ -655,9 +741,50 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
     };
 
     useSceneStore.getState().simulateLifecycleEvent('Joiner');
+    const joinerStamp = timeNow();
+    const joinerMsgCode = `EML-${7049 + get().emailNotifications.length}`;
+    const joinerEmailNotif: DemoEmailNotification = {
+      id: `eml-joiner-${Date.now()}`,
+      messageCode: joinerMsgCode,
+      timestamp: `${today} ${joinerStamp}`,
+      status: 'Delivered',
+      trigger: `Day-1 HRIS Joiner Onboarding · ${pick.dept}`,
+      triggerCategory: 'JML Lifecycle',
+      recipientName: fullName,
+      recipientEmail: newPerson.email,
+      recipientRole: `New Joiner (${pick.title})`,
+      cc: [`${pick.mgr.toLowerCase().replace(/\s+/g, '.')}@identra-corp.io`],
+      from: 'IDENTRA Identity Notifications <no-reply@identra-corp.io>',
+      subject: `Welcome to IDENTRA — Your Day-1 Access (${pick.role}) Is Ready`,
+      smtpProvider: 'Microsoft 365 Graph Mail · TLS 1.3',
+      deliveryLatencyMs: 224,
+      htmlBody: buildBrandedIdentraEmailHtml({
+        badgeText: 'DAY-1 JOINER PROVISIONED',
+        badgeTone: 'emerald',
+        headline: `Welcome ${pick.first} — Your Day-1 Identity & Roles Are Active`,
+        greeting: `Hi ${fullName},`,
+        intro: `Your authoritative Workday HRIS joiner record (${empNo}) has been processed automatically. Your Day-1 birthright accounts and business role have been provisioned with zero manual tickets.`,
+        metadataRows: [
+          { label: 'Employee #', value: empNo, mono: true },
+          { label: 'Corporate UPN', value: newPerson.upn, mono: true },
+          { label: 'Department', value: pick.dept },
+          { label: 'Org Unit', value: pick.ou },
+          { label: 'Provisioned Role', value: `${pick.role} · Corporate SSO Standard` },
+          { label: 'Line Manager', value: pick.mgr },
+        ],
+        calloutTitle: 'Zero-Trust First Sign-In',
+        calloutText:
+          'Enroll your phishing-resistant FIDO2 passkey on first sign-in to unlock SSO across your target applications.',
+        ctaLabel: 'Activate Corporate SSO',
+        ctaUrl: 'https://identra-two.vercel.app/#demo',
+        messageCode: joinerMsgCode,
+        timestamp: `${today} ${joinerStamp}`,
+      }),
+    };
 
     set((s) => ({
       people: [newPerson, ...s.people],
+      emailNotifications: [joinerEmailNotif, ...s.emailNotifications],
       accounts: [
         {
           id: `acc-new-${Date.now()}`,
@@ -1019,8 +1146,53 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
       useSceneStore.getState().resolveAttentionItem('att-reviews');
     }
 
+    const today = new Date().toISOString().slice(0, 10);
+    const stamp = timeNow();
+    const revMsgCode = `EML-${7049 + get().emailNotifications.length}`;
+    const reviewNotif: DemoEmailNotification = {
+      id: `eml-rev-${Date.now()}`,
+      messageCode: revMsgCode,
+      timestamp: `${today} ${stamp}`,
+      status: 'Delivered',
+      trigger: `Access Review ${decision} · ${item.workflowType} (${item.workflowCode})`,
+      triggerCategory: 'Access Review',
+      recipientName: item.identity,
+      recipientEmail: item.identitySnapshot.email.replace(/^owner:\s*/i, ''),
+      recipientRole: item.identityTitle,
+      cc: [`${item.reviewer.toLowerCase().replace(/\s+/g, '.')}@identra-corp.io`],
+      from: 'IDENTRA Identity Notifications <no-reply@identra-corp.io>',
+      subject: `Access Certification ${decision}: ${item.roleOrEntitlement}`,
+      smtpProvider: 'Microsoft 365 Graph Mail · TLS 1.3',
+      deliveryLatencyMs: 212,
+      htmlBody: buildBrandedIdentraEmailHtml({
+        badgeText: `CERTIFICATION ${decision.toUpperCase()}`,
+        badgeTone: decision === 'Approved' ? 'emerald' : 'amber',
+        headline: `Your Access to ${item.roleOrEntitlement} Was ${decision}`,
+        greeting: `Hello ${item.identity},`,
+        intro: `Reviewer ${item.reviewer} has finalized an attestation decision under workflow ${item.workflowType} (${item.workflowCode}).`,
+        metadataRows: [
+          { label: 'Decision', value: decision, mono: true },
+          { label: 'Entitlement / Role', value: item.roleOrEntitlement },
+          { label: 'Target System', value: item.application },
+          { label: 'Selected Workflow', value: `${item.workflowType} (${item.workflowCode})`, mono: true },
+          { label: 'Certifying Reviewer', value: item.reviewer },
+        ],
+        calloutTitle:
+          decision === 'Revoked' ? 'Automated Deprovisioning Triggered' : 'Audit Proof Sealed',
+        calloutText:
+          decision === 'Revoked'
+            ? `IDENTRA Provisioning Engine has queued automatic revocation of ${item.roleOrEntitlement} on ${item.application}.`
+            : 'No action is required on your part. Your certified access remains active through the next quarterly cycle.',
+        ctaLabel: 'View Certification Receipt',
+        ctaUrl: 'https://identra-two.vercel.app/#demo',
+        messageCode: revMsgCode,
+        timestamp: `${today} ${stamp}`,
+      }),
+    };
+
     set((s) => ({
       reviews: updatedReviews,
+      emailNotifications: [reviewNotif, ...s.emailNotifications],
       toastMessage: `${decision} "${item.roleOrEntitlement}" for ${item.identity}. Audit proof sealed.`,
       auditLog: [
         {
@@ -1117,6 +1289,7 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
       policies: INITIAL_DEMO_POLICIES,
       provisioningJobs: INITIAL_PROVISIONING_JOBS,
       importRuns: INITIAL_IMPORT_RUNS,
+      emailNotifications: INITIAL_EMAIL_NOTIFICATIONS,
       auditLog: INITIAL_DEMO_AUDIT,
       selectedPersonId: null,
       toastMessage: 'Reset all IDENTRA proof-of-concept sample data to initial baseline.',
