@@ -217,8 +217,49 @@ export type ReviewAccessType =
   | 'Direct Entitlement'
   | 'AI Agent Grant';
 
+export type ReviewWorkflowType =
+  | 'Manager Approval'
+  | 'Entitlement Owner Approval'
+  | 'Application Owner Approval'
+  | 'Dual-Stage (Manager → App Owner)'
+  | 'SOX Control Owner Approval'
+  | 'Data Owner & SecOps Approval';
+
+export interface ReviewWorkflowStage {
+  step: string;
+  approverRole: string;
+  assignee: string;
+  status: 'Active' | 'Completed' | 'Queued';
+}
+
+export interface ReviewIdentitySnapshot {
+  employeeNumber: string;
+  email: string;
+  location: string;
+  contractType: string;
+  manager: string;
+  riskScore: number;
+  lastLogin: string;
+  activeGrantsCount: number;
+}
+
+export interface ReviewEntitlementDetails {
+  description: string;
+  owner: string;
+  ownerRole: string;
+  sensitivity: 'Critical' | 'High' | 'Standard';
+  grantedOn: string;
+  lastUsed: string;
+  totalHolders: number;
+  sodImpact?: string;
+  nestedPermissions: string[];
+}
+
 export interface DemoReviewItem {
   id: string;
+  personId?: string;
+  nonHumanId?: string;
+  roleId?: string;
   identity: string;
   identityTitle: string;
   department: string;
@@ -228,6 +269,14 @@ export interface DemoReviewItem {
   parentBusinessRole: string;
   application: string;
   reviewer: string;
+  workflowType: ReviewWorkflowType;
+  workflowCode: string;
+  triggeredBy: string;
+  triggeredAt: string;
+  escalationPolicy: string;
+  workflowStages: ReviewWorkflowStage[];
+  identitySnapshot: ReviewIdentitySnapshot;
+  entitlementDetails: ReviewEntitlementDetails;
   risk: 'High' | 'Medium' | 'Low';
   usageSignal: string;
   monthlyCost?: string;
@@ -1149,6 +1198,7 @@ export const INITIAL_DEMO_ROLES: DemoRole[] = [
 export const INITIAL_DEMO_REVIEWS: DemoReviewItem[] = [
   {
     id: 'rev-ad-1',
+    personId: 'p-mark',
     identity: 'Mark Wilson (Contractor)',
     identityTitle: 'External Cloud Auditor · Terminated',
     department: 'Contractor',
@@ -1158,6 +1208,40 @@ export const INITIAL_DEMO_REVIEWS: DemoReviewItem[] = [
     parentBusinessRole: 'Direct Assignment (Orphaned — No Role Owner)',
     application: 'Active Directory',
     reviewer: 'Priya Nair',
+    workflowType: 'Entitlement Owner Approval',
+    workflowCode: 'WF-REV-ENT-04',
+    triggeredBy: 'Event: Contractor Expiry & Orphaned Privilege Alert',
+    triggeredAt: '2026-11-23 08:33',
+    escalationPolicy: 'Auto-revoke after 24h SLA (Tier-0 Privileged Group)',
+    workflowStages: [
+      { step: 'Stage 1', approverRole: 'Entitlement Owner (Cloud Vault)', assignee: 'Priya Nair', status: 'Active' },
+      { step: 'Stage 2', approverRole: 'Security Operations Sign-Off', assignee: 'SecOps On-Call', status: 'Queued' },
+    ],
+    identitySnapshot: {
+      employeeNumber: 'CTR-90114',
+      email: 'mark.wilson@ext-audit.io',
+      location: 'Remote (UK / B2B)',
+      contractType: 'Fixed-Term External Contractor (90d)',
+      manager: 'Priya Nair (Sponsor)',
+      riskScore: 91,
+      lastLogin: '3 days ago',
+      activeGrantsCount: 2,
+    },
+    entitlementDetails: {
+      description: 'Tier-0 Active Directory security group mapped via SAML federation to AWS Production Vault administrative roles.',
+      owner: 'Priya Nair',
+      ownerRole: 'Entitlement Owner · Cloud Security',
+      sensitivity: 'Critical',
+      grantedOn: '2026-08-24',
+      lastUsed: '2026-11-20',
+      totalHolders: 7,
+      sodImpact: 'Subject to JML-OFF-001 (Zero-Orphan Leaver Policy) and ACC-JIT-118.',
+      nestedPermissions: [
+        'SAML Federation → AWS Prod Vault Admin Role',
+        'KMS Key Policy Read/Decrypt (Prod)',
+        'SecretsManager:ListSecrets & GetSecretValue',
+      ],
+    },
     risk: 'High',
     usageSignal: 'Contract ended 48h ago · 0 valid sessions',
     aiRecommendation: 'Revoke',
@@ -1175,6 +1259,40 @@ export const INITIAL_DEMO_REVIEWS: DemoReviewItem[] = [
     parentBusinessRole: 'Direct Assignment (Legacy Ticket #IT-4821)',
     application: 'Active Directory',
     reviewer: 'Marcus Bell',
+    workflowType: 'Dual-Stage (Manager → App Owner)',
+    workflowCode: 'WF-REV-DUAL-02',
+    triggeredBy: 'Scheduled Q4 Privileged Access Certification',
+    triggeredAt: '2026-11-22 06:00',
+    escalationPolicy: 'Auto-revoke after 7d if uncertified; notify Infrastructure VP',
+    workflowStages: [
+      { step: 'Stage 1', approverRole: 'Line Manager Approval', assignee: 'Marcus Bell', status: 'Active' },
+      { step: 'Stage 2', approverRole: 'Application Owner (Active Directory)', assignee: 'AD Platform Team', status: 'Queued' },
+    ],
+    identitySnapshot: {
+      employeeNumber: 'EMP-10412',
+      email: 'james.thornton@identra-corp.io',
+      location: 'London, UK (HQ)',
+      contractType: 'Full-Time Permanent (FTE)',
+      manager: 'Marcus Bell',
+      riskScore: 64,
+      lastLogin: 'Today 08:11',
+      activeGrantsCount: 11,
+    },
+    entitlementDetails: {
+      description: 'Grants standing local administrator rights across Tier-1 Windows application and file servers in DC=identra,DC=corp.',
+      owner: 'AD Platform Team',
+      ownerRole: 'Application Owner · Active Directory',
+      sensitivity: 'Critical',
+      grantedOn: '2025-03-19',
+      lastUsed: '2026-08-21 (94d ago)',
+      totalHolders: 14,
+      sodImpact: 'Conflicts with Zero Standing Privilege baseline (ACC-JIT-118).',
+      nestedPermissions: [
+        'Local Administrator on OU=Tier1-Servers',
+        'RDP & WinRM Interactive Logon',
+        'Service Control Manager Write Access',
+      ],
+    },
     risk: 'High',
     usageSignal: 'Last Kerberos elevation: 94 days ago',
     aiRecommendation: 'Revoke',
@@ -1183,6 +1301,7 @@ export const INITIAL_DEMO_REVIEWS: DemoReviewItem[] = [
   },
   {
     id: 'rev-entra-1',
+    personId: 'p-john',
     identity: 'John Davies',
     identityTitle: 'Enterprise Account Director',
     department: 'Sales',
@@ -1192,6 +1311,38 @@ export const INITIAL_DEMO_REVIEWS: DemoReviewItem[] = [
     parentBusinessRole: 'Group-Based License: LIC-M365-E5-All',
     application: 'Microsoft Entra ID',
     reviewer: 'Marcus Bell',
+    workflowType: 'Manager Approval',
+    workflowCode: 'WF-REV-MGR-01',
+    triggeredBy: 'Scheduled Quarterly SaaS License Optimization Review',
+    triggeredAt: '2026-11-23 07:00',
+    escalationPolicy: 'Auto-downgrade to M365 E3 after 10d SLA ($21/mo savings)',
+    workflowStages: [
+      { step: 'Stage 1', approverRole: 'Line Manager Approval', assignee: 'Marcus Bell', status: 'Active' },
+    ],
+    identitySnapshot: {
+      employeeNumber: 'EMP-10394',
+      email: 'john.davies@identra-corp.io',
+      location: 'New York, US',
+      contractType: 'Full-Time Permanent (FTE)',
+      manager: 'Marcus Bell',
+      riskScore: 28,
+      lastLogin: 'Today 09:50',
+      activeGrantsCount: 9,
+    },
+    entitlementDetails: {
+      description: 'Full Microsoft 365 E5 enterprise license SKU including Power BI Pro, Audio Conferencing, Defender Suite, and Purview eDiscovery.',
+      owner: 'Modern Workplace IT',
+      ownerRole: 'Application Owner · Microsoft Entra ID',
+      sensitivity: 'Standard',
+      grantedOn: '2024-04-01',
+      lastUsed: 'E5 add-ons unused 118d',
+      totalHolders: 384,
+      nestedPermissions: [
+        'Microsoft 365 Apps for Enterprise',
+        'Power BI Pro & Audio Conferencing (Unused)',
+        'Microsoft Purview Compliance & Defender Plan 2',
+      ],
+    },
     risk: 'Medium',
     usageSignal: 'E5 features (PowerBI Pro / Audio Conf) unused 118 days',
     monthlyCost: '$57/mo',
@@ -1210,6 +1361,38 @@ export const INITIAL_DEMO_REVIEWS: DemoReviewItem[] = [
     parentBusinessRole: 'Direct License Assignment',
     application: 'Microsoft Entra ID',
     reviewer: 'Claire Vance',
+    workflowType: 'Application Owner Approval',
+    workflowCode: 'WF-REV-APP-03',
+    triggeredBy: 'Scheduled Quarterly SaaS License Optimization Review',
+    triggeredAt: '2026-11-23 07:00',
+    escalationPolicy: 'Reclaim unused P2 add-on after 14d SLA',
+    workflowStages: [
+      { step: 'Stage 1', approverRole: 'Application Owner (Entra ID)', assignee: 'Claire Vance', status: 'Active' },
+    ],
+    identitySnapshot: {
+      employeeNumber: 'EMP-10588',
+      email: 'daniel.foster@identra-corp.io',
+      location: 'London, UK (HQ)',
+      contractType: 'Full-Time Permanent (FTE)',
+      manager: 'Claire Vance',
+      riskScore: 18,
+      lastLogin: 'Today 09:12',
+      activeGrantsCount: 6,
+    },
+    entitlementDetails: {
+      description: 'Entra ID P2 add-on license enabling Privileged Identity Management (PIM) and Identity Protection risk policies.',
+      owner: 'Identity Platform Engineering',
+      ownerRole: 'Application Owner · Microsoft Entra ID',
+      sensitivity: 'Standard',
+      grantedOn: '2025-05-11',
+      lastUsed: '0 PIM activations in 180d',
+      totalHolders: 142,
+      nestedPermissions: [
+        'Microsoft Entra Privileged Identity Management (PIM)',
+        'Risk-Based Conditional Access Policies',
+        'Access Reviews Reviewer Capability',
+      ],
+    },
     risk: 'Medium',
     usageSignal: '0 PIM activations or Identity Protection reviews in 180 days',
     monthlyCost: '$9/mo',
@@ -1228,6 +1411,38 @@ export const INITIAL_DEMO_REVIEWS: DemoReviewItem[] = [
     parentBusinessRole: 'Business Role: Finance Leadership Pack',
     application: 'Microsoft Entra ID',
     reviewer: 'David Chen',
+    workflowType: 'Manager Approval',
+    workflowCode: 'WF-REV-MGR-01',
+    triggeredBy: 'Scheduled Q4 AI License Utilization Campaign',
+    triggeredAt: '2026-11-23 07:00',
+    escalationPolicy: 'Auto-approve if usage > 15 days/month and role valid',
+    workflowStages: [
+      { step: 'Stage 1', approverRole: 'Line Manager Approval', assignee: 'David Chen', status: 'Active' },
+    ],
+    identitySnapshot: {
+      employeeNumber: 'EMP-10074',
+      email: 'claire.brooks@identra-corp.io',
+      location: 'London, UK (HQ)',
+      contractType: 'Full-Time Permanent (FTE)',
+      manager: 'David Chen',
+      riskScore: 11,
+      lastLogin: 'Today 10:02',
+      activeGrantsCount: 8,
+    },
+    entitlementDetails: {
+      description: 'Enterprise AI assistant SKU integrated into Excel, Teams, Outlook, and PowerPoint with tenant data boundary protection.',
+      owner: 'AI Governance & Workplace IT',
+      ownerRole: 'Entitlement Owner · M365 AI Licensing',
+      sensitivity: 'Standard',
+      grantedOn: '2026-02-01',
+      lastUsed: 'Today 09:48 (24/30d active)',
+      totalHolders: 96,
+      nestedPermissions: [
+        'Copilot in Excel & Financial Modeling',
+        'Copilot in Teams Meeting Recaps',
+        'Enterprise Graph Grounding (Scoped to User ACLs)',
+      ],
+    },
     risk: 'Low',
     usageSignal: 'Active 24 of last 30 days (Excel + Teams)',
     monthlyCost: '$30/mo',
@@ -1237,6 +1452,7 @@ export const INITIAL_DEMO_REVIEWS: DemoReviewItem[] = [
   },
   {
     id: 'rev-ad-3',
+    personId: 'p-sarah',
     identity: 'Sarah Mitchell',
     identityTitle: 'Financial Analyst · Joiner',
     department: 'Finance',
@@ -1246,6 +1462,38 @@ export const INITIAL_DEMO_REVIEWS: DemoReviewItem[] = [
     parentBusinessRole: 'Business Role: Finance: Base Ledger Read',
     application: 'Active Directory',
     reviewer: 'Claire Vance',
+    workflowType: 'Manager Approval',
+    workflowCode: 'WF-REV-MGR-01',
+    triggeredBy: 'Event: Day-1 Joiner Birthright Verification (BR-002)',
+    triggeredAt: '2026-11-23 10:25',
+    escalationPolicy: 'Remind manager after 5d; standard Day-1 attestation',
+    workflowStages: [
+      { step: 'Stage 1', approverRole: 'Line Manager Approval', assignee: 'Claire Vance', status: 'Active' },
+    ],
+    identitySnapshot: {
+      employeeNumber: 'EMP-10841',
+      email: 'sarah.mitchell@identra-corp.io',
+      location: 'London, UK (HQ)',
+      contractType: 'Full-Time Permanent (FTE)',
+      manager: 'Claire Vance',
+      riskScore: 14,
+      lastLogin: 'Today 10:28',
+      activeGrantsCount: 4,
+    },
+    entitlementDetails: {
+      description: 'Read-only Active Directory security group provisioned via birthright policy BR-002 for EMEA Finance Operations analysts.',
+      owner: 'Claire Vance',
+      ownerRole: 'Entitlement Owner · Finance Operations',
+      sensitivity: 'Standard',
+      grantedOn: '2026-11-23',
+      lastUsed: 'Today 10:31',
+      totalHolders: 68,
+      nestedPermissions: [
+        'Read Access on \\\\fin-dfs\\GL-Reports',
+        'SAP S/4HANA Base Ledger View Federation',
+        'Finance SharePoint Workspace Member',
+      ],
+    },
     risk: 'Low',
     usageSignal: 'Provisioned via Day-1 HRIS birthright · Active today',
     aiRecommendation: 'Approve',
@@ -1254,6 +1502,8 @@ export const INITIAL_DEMO_REVIEWS: DemoReviewItem[] = [
   },
   {
     id: 'rev-1',
+    personId: 'p-elena',
+    roleId: 'r-ap',
     identity: 'Elena Vance',
     identityTitle: 'Treasury Operations Lead · Mover',
     department: 'Finance',
@@ -1263,6 +1513,40 @@ export const INITIAL_DEMO_REVIEWS: DemoReviewItem[] = [
     parentBusinessRole: 'Retained Legacy Role (Prior Dept: AP Ops)',
     application: 'SAP S/4HANA Finance',
     reviewer: 'David Chen',
+    workflowType: 'SOX Control Owner Approval',
+    workflowCode: 'WF-REV-SOX-09',
+    triggeredBy: 'Event: SOX-SOD-402 Toxic Combination Alert (Mover Transfer)',
+    triggeredAt: '2026-11-23 08:16',
+    escalationPolicy: 'Mandatory 48h SOX remediation SLA; escalates to Controller Office',
+    workflowStages: [
+      { step: 'Stage 1', approverRole: 'SOX Control Owner (Treasury)', assignee: 'David Chen', status: 'Active' },
+      { step: 'Stage 2', approverRole: 'Application Owner (SAP S/4HANA)', assignee: 'ERP Governance Team', status: 'Queued' },
+    ],
+    identitySnapshot: {
+      employeeNumber: 'EMP-10219',
+      email: 'elena.vance@identra-corp.io',
+      location: 'London, UK (HQ)',
+      contractType: 'Full-Time Permanent (FTE)',
+      manager: 'David Chen',
+      riskScore: 86,
+      lastLogin: 'Today 08:40',
+      activeGrantsCount: 7,
+    },
+    entitlementDetails: {
+      description: 'Accounts Payable business role granting SAP vendor master creation, invoice posting, and supplier bank detail updates.',
+      owner: 'Controller Office',
+      ownerRole: 'Business Role Owner · Financial Controls',
+      sensitivity: 'Critical',
+      grantedOn: '2024-03-14',
+      lastUsed: '2026-11-09 (Pre-transfer)',
+      totalHolders: 44,
+      sodImpact: 'SOX-SOD-402 Breach: Mutually exclusive with Treasury: Payment Approver.',
+      nestedPermissions: [
+        'SAP T-Code XK01 / BP (Create & Modify Vendor Master)',
+        'SAP T-Code FB60 (Post Vendor Invoices)',
+        'SG-Finance-AP-Specialists (AD Security Group)',
+      ],
+    },
     risk: 'High',
     usageSignal: 'Conflicting SoD pair with Treasury: Payment Approver',
     aiRecommendation: 'Revoke',
@@ -1271,6 +1555,7 @@ export const INITIAL_DEMO_REVIEWS: DemoReviewItem[] = [
   },
   {
     id: 'rev-3',
+    nonHumanId: 'nh-deploy',
     identity: 'agent.release-copilot',
     identityTitle: 'Autonomous Release AI Agent',
     department: 'Engineering (AI)',
@@ -1280,6 +1565,40 @@ export const INITIAL_DEMO_REVIEWS: DemoReviewItem[] = [
     parentBusinessRole: 'Out-of-Band Direct Grant (Bypassed Approval)',
     application: 'Snowflake PII Lake',
     reviewer: 'Lucas Meyer',
+    workflowType: 'Data Owner & SecOps Approval',
+    workflowCode: 'WF-REV-AI-07',
+    triggeredBy: 'Event: NHI-AI-209 Shadow AI Privilege Drift Detection',
+    triggeredAt: '2026-11-23 09:05',
+    escalationPolicy: 'Auto-contain & strip grant after 12h if unapproved',
+    workflowStages: [
+      { step: 'Stage 1', approverRole: 'Data Owner (Snowflake PII)', assignee: 'Lucas Meyer', status: 'Active' },
+      { step: 'Stage 2', approverRole: 'AI / NHI Security Governance', assignee: 'Platform Security', status: 'Queued' },
+    ],
+    identitySnapshot: {
+      employeeNumber: 'NHI-AI-0041',
+      email: 'owner: priya.nair@identra-corp.io',
+      location: 'Cloud · EU-West-1',
+      contractType: 'Autonomous AI Agent (MCP)',
+      manager: 'Priya Nair (Accountable Owner)',
+      riskScore: 88,
+      lastLogin: 'Today 10:15 (42 queries)',
+      activeGrantsCount: 3,
+    },
+    entitlementDetails: {
+      description: 'Direct unmasked SELECT privilege across all customer PII tables in Snowflake PROD_PII schema.',
+      owner: 'Lucas Meyer',
+      ownerRole: 'Data Owner · Enterprise Data Governance',
+      sensitivity: 'Critical',
+      grantedOn: '2026-11-21 (Out-of-band)',
+      lastUsed: 'Today 10:15',
+      totalHolders: 3,
+      sodImpact: 'Violates NHI-AI-209 (AI Agent Raw PII Isolation) & GDPR Art. 32.',
+      nestedPermissions: [
+        'SELECT on PROD_PII.CUSTOMERS_UNMASKED',
+        'SELECT on PROD_PII.PAYMENT_INSTRUMENTS',
+        'Bypass Dynamic Masking Policy MASK_PII_STANDARD',
+      ],
+    },
     risk: 'High',
     usageSignal: '42 unmasked queries in last 24h · Outside CI/CD scope',
     aiRecommendation: 'Revoke',
@@ -1288,6 +1607,8 @@ export const INITIAL_DEMO_REVIEWS: DemoReviewItem[] = [
   },
   {
     id: 'rev-5',
+    personId: 'p-priya',
+    roleId: 'r-k8s',
     identity: 'Priya Nair',
     identityTitle: 'Principal Platform Engineer',
     department: 'Engineering',
@@ -1296,7 +1617,39 @@ export const INITIAL_DEMO_REVIEWS: DemoReviewItem[] = [
     technicalId: 'AWS_PERM_SET: arn:aws:sso:::permissionSet/k8s-jit-4h',
     parentBusinessRole: 'Business Role: Platform SRE Core',
     application: 'AWS Prod Vault',
-    reviewer: 'VP Engineering',
+    reviewer: 'Alex Carter',
+    workflowType: 'Application Owner Approval',
+    workflowCode: 'WF-REV-APP-05',
+    triggeredBy: 'Scheduled Q4 Tier-0 Cloud JIT Eligibility Certification',
+    triggeredAt: '2026-11-22 06:00',
+    escalationPolicy: 'Suspend JIT eligibility after 14d SLA if uncertified',
+    workflowStages: [
+      { step: 'Stage 1', approverRole: 'Application Owner (AWS Prod Vault)', assignee: 'Alex Carter', status: 'Active' },
+    ],
+    identitySnapshot: {
+      employeeNumber: 'EMP-10105',
+      email: 'priya.nair@identra-corp.io',
+      location: 'London, UK (HQ)',
+      contractType: 'Full-Time Permanent (FTE)',
+      manager: 'Alex Carter',
+      riskScore: 16,
+      lastLogin: 'Yesterday 18:15',
+      activeGrantsCount: 6,
+    },
+    entitlementDetails: {
+      description: 'Zero-standing-privilege business role granting time-bound 4-hour EKS production cluster operator elevation via AWS IAM Identity Center.',
+      owner: 'Alex Carter',
+      ownerRole: 'Application Owner · Cloud Infrastructure',
+      sensitivity: 'High',
+      grantedOn: '2023-09-01',
+      lastUsed: 'Yesterday 18:15 (4h JIT session)',
+      totalHolders: 18,
+      nestedPermissions: [
+        'AWS SSO Permission Set: EKS-Prod-Operator (4h TTL)',
+        'CloudWatch & Audit Session Recording Required',
+        'Break-Glass Ticket Correlation (Jira / ServiceNow)',
+      ],
+    },
     risk: 'Low',
     usageSignal: 'Time-bound 4h JIT elevation · 0 standing privileges',
     aiRecommendation: 'Approve',
