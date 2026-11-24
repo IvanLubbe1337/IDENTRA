@@ -5,7 +5,9 @@ export type DemoSectionId =
   | 'applications'
   | 'entitlements'
   | 'roles'
+  | 'role-mining'
   | 'birthrights'
+  | 'governance-assurance'
   | 'access-reviews'
   | 'policies-sod'
   | 'compliance'
@@ -3399,4 +3401,791 @@ export const INITIAL_EMAIL_NOTIFICATIONS: DemoEmailNotification[] = [
       timestamp: '2026-11-24 07:45:05',
     }
   ),
+];
+
+/* -------------------------------------------------------------------------- */
+/* Governance Assurance & Configurable Governance Controls                    */
+/* -------------------------------------------------------------------------- */
+
+export type GovernanceControlDomain =
+  | 'Ownership'
+  | 'Identity Hygiene'
+  | 'Account Integrity'
+  | 'Access Hygiene'
+  | 'Non-Human Governance';
+
+export interface GovernanceControlViolation {
+  id: string;
+  objectName: string;
+  objectType: 'Application' | 'Identity' | 'Account' | 'Entitlement' | 'Non-Human ID' | 'Role';
+  detail: string;
+  detectedAt: string;
+  suggestedFix: string;
+  resolved: boolean;
+}
+
+export interface DemoGovernanceControl {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  domain: GovernanceControlDomain;
+  severity: 'Critical' | 'High' | 'Medium';
+  preventativeEnabled: boolean;
+  detectiveEnabled: boolean;
+  totalEvaluated: number;
+  evaluatedUnit: string;
+  lastScanAt: string;
+  preventativeTestExample: {
+    attemptedAction: string;
+    blockedMessage: string;
+    allowedMessage: string;
+  };
+  violations: GovernanceControlViolation[];
+}
+
+export const INITIAL_GOVERNANCE_CONTROLS: DemoGovernanceControl[] = [
+  {
+    id: 'ga-ent-owner',
+    code: 'GA-CTRL-01',
+    name: 'Entitlement Ownership',
+    description: 'Every entitlement must have an assigned owner.',
+    domain: 'Ownership',
+    severity: 'High',
+    preventativeEnabled: true,
+    detectiveEnabled: true,
+    totalEvaluated: 12480,
+    evaluatedUnit: 'entitlements',
+    lastScanAt: '2m ago',
+    preventativeTestExample: {
+      attemptedAction: 'Create entitlement "SAP:FI_GL_OVERRIDE" with owner = null',
+      blockedMessage:
+        'BLOCKED BY GA-CTRL-01 (Preventative): Entitlement creation rejected because no accountable Entitlement Owner was assigned.',
+      allowedMessage:
+        'ALLOWED (Preventative Off): Entitlement created without owner — Detective scan will flag this as an Ownership violation.',
+    },
+    violations: [],
+  },
+  {
+    id: 'ga-app-owner',
+    code: 'GA-CTRL-02',
+    name: 'Application Ownership',
+    description: 'Every connected system must have an accountable owner.',
+    domain: 'Ownership',
+    severity: 'Critical',
+    preventativeEnabled: true,
+    detectiveEnabled: true,
+    totalEvaluated: 126,
+    evaluatedUnit: 'connected apps',
+    lastScanAt: '2m ago',
+    preventativeTestExample: {
+      attemptedAction: 'Onboard connector "Legacy ERP Bridge" without Application Owner',
+      blockedMessage:
+        'BLOCKED BY GA-CTRL-02 (Preventative): Target system registration halted — an active Application Owner must be bound before activation.',
+      allowedMessage:
+        'ALLOWED (Preventative Off): Connector registered without owner — flagged for Detective remediation.',
+    },
+    violations: [
+      {
+        id: 'gv-app-1',
+        objectName: 'Legacy Payroll SFTP Bridge',
+        objectType: 'Application',
+        detail: 'Previous Application Owner left the organization 18 days ago; no fallback steward assigned.',
+        detectedAt: '2026-11-24 07:30',
+        suggestedFix: 'Assign Claire Vance as accountable Application Owner',
+        resolved: false,
+      },
+      {
+        id: 'gv-app-2',
+        objectName: 'Snowflake Analytics Staging',
+        objectType: 'Application',
+        detail: 'Connected data warehouse onboarded via API without owner metadata populated.',
+        detectedAt: '2026-11-24 07:30',
+        suggestedFix: 'Assign Lucas Meyer (Data Governance) as Application Owner',
+        resolved: false,
+      },
+      {
+        id: 'gv-app-3',
+        objectName: 'Regional CRM Sandbox',
+        objectType: 'Application',
+        detail: 'Owner attribute references inactive employee record EMP-09411.',
+        detectedAt: '2026-11-23 19:15',
+        suggestedFix: 'Reassign ownership to Marcus Bell (VP Enterprise Sales)',
+        resolved: false,
+      },
+      {
+        id: 'gv-app-4',
+        objectName: 'B2B Vendor Document Vault',
+        objectType: 'Application',
+        detail: 'Owner handoff request pending acceptance for >30 days.',
+        detectedAt: '2026-11-23 14:00',
+        suggestedFix: 'Assign Priya Nair as interim Application Owner',
+        resolved: false,
+      },
+    ],
+  },
+  {
+    id: 'ga-id-mgr',
+    code: 'GA-CTRL-03',
+    name: 'Identity Manager Assignment',
+    description: 'Every active identity must have a valid manager.',
+    domain: 'Identity Hygiene',
+    severity: 'High',
+    preventativeEnabled: false,
+    detectiveEnabled: true,
+    totalEvaluated: 6732,
+    evaluatedUnit: 'active identities',
+    lastScanAt: '2m ago',
+    preventativeTestExample: {
+      attemptedAction: 'Import active identity "EMP-10940" with empty managerRefId',
+      blockedMessage:
+        'BLOCKED BY GA-CTRL-03 (Preventative): Identity activation held in staging until a valid active Line Manager is resolved from Workday.',
+      allowedMessage:
+        'ALLOWED (Preventative Off): Identity activated with null manager — Detective control flagged violation for HR/IAM remediation.',
+    },
+    violations: [
+      {
+        id: 'gv-mgr-1',
+        objectName: "Liam O'Connor (EMP-10644)",
+        objectType: 'Identity',
+        detail: 'Assigned line manager was off-boarded in Workday; reporting line broken.',
+        detectedAt: '2026-11-24 08:05',
+        suggestedFix: 'Re-parent reporting line to Alex Carter (VP Engineering)',
+        resolved: false,
+      },
+      {
+        id: 'gv-mgr-2',
+        objectName: 'Nadia Patel (EMP-10718)',
+        objectType: 'Identity',
+        detail: 'Missing managerRefId following EMEA commercial org restructure.',
+        detectedAt: '2026-11-24 08:05',
+        suggestedFix: 'Bind Marcus Bell as valid Line Manager',
+        resolved: false,
+      },
+      {
+        id: 'gv-mgr-3',
+        objectName: 'External Auditor Pool #04 (CTR-90201)',
+        objectType: 'Identity',
+        detail: 'Active external contractor identity lacks a valid internal sponsor/manager.',
+        detectedAt: '2026-11-23 22:00',
+        suggestedFix: 'Assign Priya Nair as accountable Contractor Sponsor',
+        resolved: false,
+      },
+      {
+        id: 'gv-mgr-4',
+        objectName: 'Tomasz Nowak (EMP-10519)',
+        objectType: 'Identity',
+        detail: 'Assigned manager is on extended leave with no approval delegate configured.',
+        detectedAt: '2026-11-23 16:40',
+        suggestedFix: 'Assign Claire Vance as delegated approving manager',
+        resolved: false,
+      },
+      {
+        id: 'gv-mgr-5',
+        objectName: 'Rachel Cho (EMP-10802)',
+        objectType: 'Identity',
+        detail: 'Workday supervisor ID failed correlation during last delta import.',
+        detectedAt: '2026-11-23 11:20',
+        suggestedFix: 'Sync supervisor record to Hannah Lindqvist (CDO)',
+        resolved: false,
+      },
+    ],
+  },
+  {
+    id: 'ga-orphans',
+    code: 'GA-CTRL-04',
+    name: 'Orphaned Accounts',
+    description: 'Every account must be linked to an identity or have an approved exception.',
+    domain: 'Account Integrity',
+    severity: 'Critical',
+    preventativeEnabled: true,
+    detectiveEnabled: true,
+    totalEvaluated: 18420,
+    evaluatedUnit: 'target accounts',
+    lastScanAt: '2m ago',
+    preventativeTestExample: {
+      attemptedAction: 'Provision AD account "tmp_ops99" without authoritative personId link',
+      blockedMessage:
+        'BLOCKED BY GA-CTRL-04 (Preventative): Uncorrelated account creation blocked — link to an authoritative identity or attach an approved exception ticket.',
+      allowedMessage:
+        'ALLOWED (Preventative Off): Unlinked target account created — Detective scan will quarantine unless an approved exception is registered.',
+    },
+    violations: [],
+  },
+  {
+    id: 'ga-nhi-steward',
+    code: 'GA-CTRL-05',
+    name: 'Non-Human Identity Stewardship',
+    description: 'Every AI agent, service account, and API token must have a human steward and rotation TTL.',
+    domain: 'Non-Human Governance',
+    severity: 'Critical',
+    preventativeEnabled: true,
+    detectiveEnabled: true,
+    totalEvaluated: 1284,
+    evaluatedUnit: 'non-human IDs',
+    lastScanAt: '2m ago',
+    preventativeTestExample: {
+      attemptedAction: 'Register MCP AI agent "agent.invoice-bot" without human steward',
+      blockedMessage:
+        'BLOCKED BY GA-CTRL-05 (Preventative): Non-human credential issuance denied until a verified human owner and ≤60d rotation TTL are bound.',
+      allowedMessage:
+        'ALLOWED (Preventative Off): Ownerless AI agent registered — flagged immediately by Detective Non-Human scan.',
+    },
+    violations: [
+      {
+        id: 'gv-nhi-1',
+        objectName: 'api.legacy-billing-sync',
+        objectType: 'Non-Human ID',
+        detail: 'Unassigned API token with wildcard S3 access; secret unrotated for 194 days.',
+        detectedAt: '2026-11-24 06:00',
+        suggestedFix: 'Bind Platform Security as steward & rotate API secret',
+        resolved: false,
+      },
+      {
+        id: 'gv-nhi-2',
+        objectName: 'svc.reporting-webhook-prod',
+        objectType: 'Non-Human ID',
+        detail: 'Production webhook service account missing designated human steward.',
+        detectedAt: '2026-11-23 18:10',
+        suggestedFix: 'Assign Lucas Meyer as steward & enforce 60d TTL',
+        resolved: false,
+      },
+    ],
+  },
+  {
+    id: 'ga-priv-recert',
+    code: 'GA-CTRL-06',
+    name: 'Privileged Role Recertification SLA',
+    description: 'Every Tier-0 privileged role must be recertified within its 90-day governance window.',
+    domain: 'Access Hygiene',
+    severity: 'High',
+    preventativeEnabled: false,
+    detectiveEnabled: true,
+    totalEvaluated: 737,
+    evaluatedUnit: 'business roles',
+    lastScanAt: '2m ago',
+    preventativeTestExample: {
+      attemptedAction: 'Extend standing Tier-0 AD group membership past 90-day certification SLA',
+      blockedMessage:
+        'BLOCKED BY GA-CTRL-06 (Preventative): Standing extension denied — Tier-0 privileges require active recertification or JIT elevation.',
+      allowedMessage:
+        'ALLOWED (Preventative Off): Standing privilege extended past SLA — Detective monitor opened a compliance violation.',
+    },
+    violations: [
+      {
+        id: 'gv-rec-1',
+        objectName: 'SG-Domain-Tier1-ServerAdmins',
+        objectType: 'Role',
+        detail: '94 days since last certification sign-off; exceeds mandatory 90-day Tier-0 SLA.',
+        detectedAt: '2026-11-24 06:00',
+        suggestedFix: 'Trigger immediate Access Review (WF-REV-DUAL-02) & convert to JIT',
+        resolved: false,
+      },
+    ],
+  },
+];
+
+/* -------------------------------------------------------------------------- */
+/* Role Mining Engine (Clustering, Correlation, Outliers, Simulation & Opt)   */
+/* -------------------------------------------------------------------------- */
+
+export interface MinedEntitlementSupport {
+  name: string;
+  application: string;
+  technicalId: string;
+  supportPct: number; // % of identities in this cluster holding this entitlement
+}
+
+export interface RoleSimulationIdentityImpact {
+  id: string;
+  name: string;
+  employeeNumber: string;
+  title: string;
+  location: string;
+  existingEntitlementsCount: number;
+  netNewEntitlements: string[];
+  sodStatus: 'Clean' | 'Blocked';
+}
+
+export interface DemoMinedRoleCandidate {
+  id: string;
+  code: string;
+  suggestedRoleName: string;
+  roleKind: 'Business Role' | 'IT Role';
+  confidenceScore: number; // 0-100
+  matchedIdentitiesCount: number;
+  analyzedPopulation: number;
+  attributes: { label: string; value: string }[];
+  entitlements: MinedEntitlementSupport[];
+  directGrantsReplaced: number;
+  sodCheck: 'Passed (0 Conflicts)' | 'Requires Review';
+  status: 'Recommended' | 'Promoted' | 'Dismissed';
+  simulationSample: RoleSimulationIdentityImpact[];
+}
+
+export interface DemoEntitlementCorrelation {
+  id: string;
+  clusterCode: string;
+  suggestedRoleName: string;
+  entitlements: string[];
+  coOccurrencePct: number;
+  identityCount: number;
+  liftScore: string;
+}
+
+export interface DemoMiningOutlier {
+  id: string;
+  identityName: string;
+  employeeNumber: string;
+  peerCluster: string;
+  outlierEntitlement: string;
+  application: string;
+  peerPrevalencePct: number; // e.g. 3% (1 of 34 peers)
+  peerRatioLabel: string;
+  riskScore: number;
+  reason: string;
+  status: 'Flagged' | 'Revoked' | 'Sent to Review';
+}
+
+export interface DemoRoleOptimisationItem {
+  id: string;
+  category: 'Overlapping' | 'Redundant' | 'Underutilised';
+  primaryRole: string;
+  comparedRole?: string;
+  overlapPct: number;
+  membersAffected: number;
+  entitlementsSaved: number;
+  recommendation: string;
+  status: 'Open' | 'Optimised';
+}
+
+export const INITIAL_MINED_ROLES: DemoMinedRoleCandidate[] = [
+  {
+    id: 'rm-fin-jhb',
+    code: 'RM-001',
+    suggestedRoleName: 'Finance – Financial Accountant',
+    roleKind: 'Business Role',
+    confidenceScore: 96,
+    matchedIdentitiesCount: 34,
+    analyzedPopulation: 500,
+    attributes: [
+      { label: 'Department', value: 'Finance' },
+      { label: 'Job title', value: 'Financial Accountant' },
+      { label: 'Location', value: 'Johannesburg' },
+    ],
+    entitlements: [
+      {
+        name: 'SAP Finance',
+        application: 'SAP S/4HANA Finance',
+        technicalId: 'SAP_ROLE: Z_FI_GL_ACCOUNTANT_JHB',
+        supportPct: 100,
+      },
+      {
+        name: 'SharePoint Finance',
+        application: 'Microsoft 365 SharePoint',
+        technicalId: 'SPO_SITE: /sites/finance-za-members',
+        supportPct: 97,
+      },
+      {
+        name: 'Finance Reporting',
+        application: 'Power BI / Reporting Suite',
+        technicalId: 'PBI_WORKSPACE: FIN_STATUTORY_REPORTING',
+        supportPct: 94,
+      },
+      {
+        name: 'Finance Shared Drive',
+        application: 'Active Directory',
+        technicalId: 'CN=SG-Finance-SharedDrive-JHB,OU=Finance,DC=identra,DC=corp',
+        supportPct: 94,
+      },
+    ],
+    directGrantsReplaced: 131,
+    sodCheck: 'Passed (0 Conflicts)',
+    status: 'Recommended',
+    simulationSample: [
+      {
+        id: 'sim-1',
+        name: 'Lerato Dlamini',
+        employeeNumber: 'EMP-11204',
+        title: 'Financial Accountant',
+        location: 'Johannesburg',
+        existingEntitlementsCount: 4,
+        netNewEntitlements: [],
+        sodStatus: 'Clean',
+      },
+      {
+        id: 'sim-2',
+        name: 'Pieter van der Merwe',
+        employeeNumber: 'EMP-11219',
+        title: 'Financial Accountant',
+        location: 'Johannesburg',
+        existingEntitlementsCount: 3,
+        netNewEntitlements: ['Finance Reporting'],
+        sodStatus: 'Clean',
+      },
+      {
+        id: 'sim-3',
+        name: 'Aisha Patel',
+        employeeNumber: 'EMP-11242',
+        title: 'Financial Accountant',
+        location: 'Johannesburg',
+        existingEntitlementsCount: 3,
+        netNewEntitlements: ['Finance Shared Drive'],
+        sodStatus: 'Clean',
+      },
+      {
+        id: 'sim-4',
+        name: 'Sipho Ndlovu',
+        employeeNumber: 'EMP-11288',
+        title: 'Financial Accountant',
+        location: 'Johannesburg',
+        existingEntitlementsCount: 2,
+        netNewEntitlements: ['SharePoint Finance', 'Finance Reporting'],
+        sodStatus: 'Clean',
+      },
+    ],
+  },
+  {
+    id: 'rm-eng-sre',
+    code: 'RM-002',
+    suggestedRoleName: 'Engineering – Cloud Platform SRE',
+    roleKind: 'Business Role',
+    confidenceScore: 93,
+    matchedIdentitiesCount: 28,
+    analyzedPopulation: 500,
+    attributes: [
+      { label: 'Department', value: 'Platform & Cloud Engineering' },
+      { label: 'Job title', value: 'Platform Engineer' },
+      { label: 'Location', value: 'Cape Town / London' },
+    ],
+    entitlements: [
+      {
+        name: 'AWS Prod Read-Only',
+        application: 'AWS Prod Vault',
+        technicalId: 'AWS_PERM_SET: arn:aws:sso:::permissionSet/prod-ro',
+        supportPct: 100,
+      },
+      {
+        name: 'GitHub Enterprise Org Member',
+        application: 'GitHub Enterprise',
+        technicalId: 'GH_TEAM: identra/platform-sre',
+        supportPct: 96,
+      },
+      {
+        name: 'Kubernetes Non-Prod Deploy',
+        application: 'AWS Prod Vault',
+        technicalId: 'EKS_RBAC: cluster-staging-deployer',
+        supportPct: 89,
+      },
+      {
+        name: 'Observability Telemetry Read',
+        application: 'Okta Workforce Cloud',
+        technicalId: 'APP_ROLE: Datadog-SRE-Viewer',
+        supportPct: 89,
+      },
+    ],
+    directGrantsReplaced: 105,
+    sodCheck: 'Passed (0 Conflicts)',
+    status: 'Recommended',
+    simulationSample: [
+      {
+        id: 'sim-5',
+        name: 'Priya Nair',
+        employeeNumber: 'EMP-10105',
+        title: 'Principal Platform Engineer',
+        location: 'London, UK (HQ)',
+        existingEntitlementsCount: 4,
+        netNewEntitlements: [],
+        sodStatus: 'Clean',
+      },
+      {
+        id: 'sim-6',
+        name: 'Ruan Botha',
+        employeeNumber: 'EMP-11310',
+        title: 'Platform Engineer',
+        location: 'Cape Town',
+        existingEntitlementsCount: 3,
+        netNewEntitlements: ['Observability Telemetry Read'],
+        sodStatus: 'Clean',
+      },
+      {
+        id: 'sim-7',
+        name: 'Zanele Khumalo',
+        employeeNumber: 'EMP-11327',
+        title: 'Platform Engineer',
+        location: 'Cape Town',
+        existingEntitlementsCount: 3,
+        netNewEntitlements: ['Kubernetes Non-Prod Deploy'],
+        sodStatus: 'Clean',
+      },
+    ],
+  },
+  {
+    id: 'rm-it-sd2',
+    code: 'RM-003',
+    suggestedRoleName: 'IT – Service Desk Tier 2 Support',
+    roleKind: 'IT Role',
+    confidenceScore: 91,
+    matchedIdentitiesCount: 22,
+    analyzedPopulation: 500,
+    attributes: [
+      { label: 'Department', value: 'IT Operations' },
+      { label: 'Job title', value: 'Support Analyst' },
+      { label: 'Location', value: 'Johannesburg' },
+    ],
+    entitlements: [
+      {
+        name: 'AD Password Reset Delegated',
+        application: 'Active Directory',
+        technicalId: 'CN=SG-IT-Helpdesk-PwdReset,OU=IT,DC=identra,DC=corp',
+        supportPct: 100,
+      },
+      {
+        name: 'Entra ID Helpdesk Administrator',
+        application: 'Microsoft Entra ID',
+        technicalId: 'ENTRA_ROLE: 729827e3-9c14-49f7-bb1b-9608f156bbb8',
+        supportPct: 95,
+      },
+      {
+        name: 'ServiceNow Incident Resolver',
+        application: 'Okta Workforce Cloud',
+        technicalId: 'SNOW_GROUP: IT_Tier2_Resolvers',
+        supportPct: 91,
+      },
+      {
+        name: 'Intune Endpoint Diagnostics',
+        application: 'Microsoft Entra ID',
+        technicalId: 'INTUNE_ROLE: Endpoint-Helpdesk-Read',
+        supportPct: 82,
+      },
+    ],
+    directGrantsReplaced: 81,
+    sodCheck: 'Passed (0 Conflicts)',
+    status: 'Recommended',
+    simulationSample: [
+      {
+        id: 'sim-8',
+        name: 'Kabelo Maseko',
+        employeeNumber: 'EMP-11402',
+        title: 'Support Analyst',
+        location: 'Johannesburg',
+        existingEntitlementsCount: 4,
+        netNewEntitlements: [],
+        sodStatus: 'Clean',
+      },
+      {
+        id: 'sim-9',
+        name: 'Chantal Pretorius',
+        employeeNumber: 'EMP-11415',
+        title: 'Support Analyst',
+        location: 'Johannesburg',
+        existingEntitlementsCount: 3,
+        netNewEntitlements: ['Intune Endpoint Diagnostics'],
+        sodStatus: 'Clean',
+      },
+    ],
+  },
+  {
+    id: 'rm-sls-ae',
+    code: 'RM-004',
+    suggestedRoleName: 'Sales – Enterprise Account Executive',
+    roleKind: 'Business Role',
+    confidenceScore: 86,
+    matchedIdentitiesCount: 41,
+    analyzedPopulation: 500,
+    attributes: [
+      { label: 'Department', value: 'Enterprise Sales' },
+      { label: 'Job title', value: 'Account Executive' },
+      { label: 'Location', value: 'Johannesburg / New York' },
+    ],
+    entitlements: [
+      {
+        name: 'Salesforce CRM Enterprise',
+        application: 'Salesforce CRM',
+        technicalId: 'SFDC_PERMSET: Enterprise_AE_Core',
+        supportPct: 98,
+      },
+      {
+        name: 'Deal Desk Quote Portal',
+        application: 'Okta Workforce Cloud',
+        technicalId: 'APP_ROLE: DealDesk-Submitter',
+        supportPct: 85,
+      },
+      {
+        name: 'Revenue BI Dashboard',
+        application: 'Snowflake PII Lake',
+        technicalId: 'GRANT SELECT ON VIEW ANALYTICS.PIPELINE_SUMMARY',
+        supportPct: 78,
+      },
+    ],
+    directGrantsReplaced: 107,
+    sodCheck: 'Passed (0 Conflicts)',
+    status: 'Recommended',
+    simulationSample: [
+      {
+        id: 'sim-10',
+        name: 'John Davies',
+        employeeNumber: 'EMP-10394',
+        title: 'Enterprise Account Director',
+        location: 'New York, US',
+        existingEntitlementsCount: 3,
+        netNewEntitlements: [],
+        sodStatus: 'Clean',
+      },
+      {
+        id: 'sim-11',
+        name: 'Nomsa Zulu',
+        employeeNumber: 'EMP-11490',
+        title: 'Account Executive',
+        location: 'Johannesburg',
+        existingEntitlementsCount: 2,
+        netNewEntitlements: ['Revenue BI Dashboard'],
+        sodStatus: 'Clean',
+      },
+    ],
+  },
+];
+
+export const INITIAL_ENTITLEMENT_CORRELATIONS: DemoEntitlementCorrelation[] = [
+  {
+    id: 'corr-1',
+    clusterCode: 'RM-001',
+    suggestedRoleName: 'Finance – Financial Accountant',
+    entitlements: ['SAP Finance', 'SharePoint Finance', 'Finance Reporting', 'Finance Shared Drive'],
+    coOccurrencePct: 94,
+    identityCount: 34,
+    liftScore: '6.8×',
+  },
+  {
+    id: 'corr-2',
+    clusterCode: 'RM-002',
+    suggestedRoleName: 'Engineering – Cloud Platform SRE',
+    entitlements: ['AWS Prod Read-Only', 'GitHub Enterprise Org Member', 'Kubernetes Non-Prod Deploy', 'Observability Telemetry Read'],
+    coOccurrencePct: 89,
+    identityCount: 28,
+    liftScore: '5.9×',
+  },
+  {
+    id: 'corr-3',
+    clusterCode: 'RM-003',
+    suggestedRoleName: 'IT – Service Desk Tier 2 Support',
+    entitlements: ['AD Password Reset Delegated', 'Entra ID Helpdesk Administrator', 'ServiceNow Incident Resolver', 'Intune Endpoint Diagnostics'],
+    coOccurrencePct: 86,
+    identityCount: 22,
+    liftScore: '7.4×',
+  },
+  {
+    id: 'corr-4',
+    clusterCode: 'RM-004',
+    suggestedRoleName: 'Sales – Enterprise Account Executive',
+    entitlements: ['Salesforce CRM Enterprise', 'Deal Desk Quote Portal', 'Revenue BI Dashboard'],
+    coOccurrencePct: 81,
+    identityCount: 41,
+    liftScore: '4.7×',
+  },
+];
+
+export const INITIAL_MINING_OUTLIERS: DemoMiningOutlier[] = [
+  {
+    id: 'out-1',
+    identityName: 'Thabo Mokoena',
+    employeeNumber: 'EMP-11209',
+    peerCluster: 'Finance · Financial Accountant · Johannesburg (34 peers)',
+    outlierEntitlement: 'SAP:FI_WIRE_APPROVE_50K',
+    application: 'SAP S/4HANA Finance',
+    peerPrevalencePct: 3,
+    peerRatioLabel: '1 of 34 peers',
+    riskScore: 89,
+    reason: 'Holds Tier-0 Treasury wire release authority while 97% of Financial Accountant peers only hold base SAP Finance.',
+    status: 'Flagged',
+  },
+  {
+    id: 'out-2',
+    identityName: 'Elena Vance',
+    employeeNumber: 'EMP-10219',
+    peerCluster: 'Finance · Treasury Operations · London (12 peers)',
+    outlierEntitlement: 'SAP:FI_VENDOR_CREATE',
+    application: 'SAP S/4HANA Finance',
+    peerPrevalencePct: 8,
+    peerRatioLabel: '1 of 12 peers',
+    riskScore: 86,
+    reason: 'Retained legacy Accounts Payable vendor creation grant after department transfer; triggers SOX-SOD-402.',
+    status: 'Flagged',
+  },
+  {
+    id: 'out-3',
+    identityName: 'Kagiso Sithole',
+    employeeNumber: 'EMP-11408',
+    peerCluster: 'IT Operations · Support Analyst · Johannesburg (22 peers)',
+    outlierEntitlement: 'SG-Domain-Tier1-ServerAdmins',
+    application: 'Active Directory',
+    peerPrevalencePct: 5,
+    peerRatioLabel: '1 of 22 peers',
+    riskScore: 84,
+    reason: 'Standing Tier-1 AD server admin privilege granted via ad-hoc ticket; 95% of Tier 2 Support peers do not hold this group.',
+    status: 'Flagged',
+  },
+  {
+    id: 'out-4',
+    identityName: 'Nomsa Zulu',
+    employeeNumber: 'EMP-11490',
+    peerCluster: 'Enterprise Sales · Account Executive · Johannesburg (41 peers)',
+    outlierEntitlement: 'SNOWFLAKE:RAW_PII_SELECT',
+    application: 'Snowflake PII Lake',
+    peerPrevalencePct: 2,
+    peerRatioLabel: '1 of 41 peers',
+    riskScore: 82,
+    reason: 'Direct unmasked customer PII query access far outside standard Account Executive Revenue BI scope.',
+    status: 'Flagged',
+  },
+];
+
+export const INITIAL_ROLE_OPTIMISATIONS: DemoRoleOptimisationItem[] = [
+  {
+    id: 'opt-1',
+    category: 'Overlapping',
+    primaryRole: 'Finance: JHB General Ledger',
+    comparedRole: 'Finance: Base Ledger Read',
+    overlapPct: 92,
+    membersAffected: 34,
+    entitlementsSaved: 11,
+    recommendation:
+      'Merge overlapping JHB General Ledger role into the newly mined "Finance – Financial Accountant" business role.',
+    status: 'Open',
+  },
+  {
+    id: 'opt-2',
+    category: 'Redundant',
+    primaryRole: 'Sales: Regional Pipeline Viewer (Legacy)',
+    comparedRole: 'Sales: Regional CRM Lead',
+    overlapPct: 100,
+    membersAffected: 19,
+    entitlementsSaved: 6,
+    recommendation:
+      '100% entitlement subset of Regional CRM Lead — retire duplicate legacy role and remap 19 members automatically.',
+    status: 'Open',
+  },
+  {
+    id: 'opt-3',
+    category: 'Underutilised',
+    primaryRole: 'IT: Legacy VPN Contractors 2023',
+    overlapPct: 14,
+    membersAffected: 2,
+    entitlementsSaved: 5,
+    recommendation:
+      'Only 2 members remaining across 500 identities (0 logins in 120d) — archive role and transition to B2B birthright.',
+    status: 'Open',
+  },
+  {
+    id: 'opt-4',
+    category: 'Overlapping',
+    primaryRole: 'Engineering: AWS Staging DevOps',
+    comparedRole: 'Prod K8s Operator (JIT)',
+    overlapPct: 84,
+    membersAffected: 28,
+    entitlementsSaved: 9,
+    recommendation:
+      'Consolidate shared AWS/GitHub baseline into "Engineering – Cloud Platform SRE" and keep Prod K8s strictly JIT.',
+    status: 'Open',
+  },
 ];

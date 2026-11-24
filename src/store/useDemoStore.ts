@@ -11,9 +11,13 @@ import {
   INITIAL_DEMO_REVIEWS,
   INITIAL_DEMO_ROLES,
   INITIAL_EMAIL_NOTIFICATIONS,
+  INITIAL_GOVERNANCE_CONTROLS,
   INITIAL_IMPORT_RUNS,
+  INITIAL_MINED_ROLES,
+  INITIAL_MINING_OUTLIERS,
   INITIAL_PLATFORM_CONFIG,
   INITIAL_PROVISIONING_JOBS,
+  INITIAL_ROLE_OPTIMISATIONS,
   buildBrandedIdentraEmailHtml,
   evaluateBirthrightMatches,
   type BrandedEmailTemplateInput,
@@ -22,15 +26,20 @@ import {
   type DemoBirthrightRule,
   type DemoEmailNotification,
   type DemoEntitlement,
+  type DemoGovernanceControl,
   type DemoImportRun,
+  type DemoMinedRoleCandidate,
+  type DemoMiningOutlier,
   type DemoNonHuman,
   type DemoPerson,
   type DemoPolicy,
   type DemoProvisioningJob,
   type DemoReviewItem,
   type DemoRole,
+  type DemoRoleOptimisationItem,
   type DemoSectionId,
   type DemoTargetAccount,
+  type GovernanceControlDomain,
   type MasterEmailTemplateConfig,
   type PlatformConfig,
   type SmtpConfig,
@@ -52,10 +61,14 @@ interface DemoStore {
   applications: DemoApplication[];
   entitlements: DemoEntitlement[];
   roles: DemoRole[];
+  minedRoles: DemoMinedRoleCandidate[];
+  miningOutliers: DemoMiningOutlier[];
+  roleOptimisations: DemoRoleOptimisationItem[];
   birthrights: DemoBirthrightRule[];
   accounts: DemoTargetAccount[];
   reviews: DemoReviewItem[];
   policies: DemoPolicy[];
+  governanceControls: DemoGovernanceControl[];
   provisioningJobs: DemoProvisioningJob[];
   importRuns: DemoImportRun[];
   emailNotifications: DemoEmailNotification[];
@@ -67,6 +80,23 @@ interface DemoStore {
   setSelectedPersonId: (id: string | null) => void;
   clearToast: () => void;
 
+  // Governance Assurance actions
+  toggleGovernanceControlEnforcement: (
+    controlId: string,
+    level: 'preventative' | 'detective'
+  ) => void;
+  remediateGovernanceViolation: (controlId: string, violationId: string) => void;
+  remediateAllControlViolations: (controlId: string) => void;
+  runGovernanceDetectiveScan: () => void;
+  addGovernanceControl: (input: {
+    name: string;
+    description: string;
+    domain: GovernanceControlDomain;
+    severity: 'Critical' | 'High' | 'Medium';
+    preventativeEnabled: boolean;
+    detectiveEnabled: boolean;
+  }) => void;
+
   // Platform Configuration actions (SMTP, Master Email Template, Provisioning & Governance)
   updateSmtpConfig: (patch: Partial<SmtpConfig>) => void;
   testSmtpConnection: () => void;
@@ -77,6 +107,12 @@ interface DemoStore {
   // Email Notification Log actions
   retryEmailNotification: (emailId: string) => void;
   resendEmailNotification: (emailId: string) => void;
+
+  // Role Mining actions
+  runRoleMiningDiscovery: () => void;
+  promoteMinedRole: (candidateId: string) => void;
+  resolveMiningOutlier: (outlierId: string, action: 'revoke' | 'review') => void;
+  applyRoleOptimisation: (optId: string) => void;
 
   // Birthright Engine actions
   toggleBirthrightStatus: (ruleId: string) => void;
@@ -134,10 +170,14 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
   applications: INITIAL_DEMO_APPS,
   entitlements: INITIAL_DEMO_ENTITLEMENTS,
   roles: INITIAL_DEMO_ROLES,
+  minedRoles: INITIAL_MINED_ROLES,
+  miningOutliers: INITIAL_MINING_OUTLIERS,
+  roleOptimisations: INITIAL_ROLE_OPTIMISATIONS,
   birthrights: INITIAL_DEMO_BIRTHRIGHTS,
   accounts: INITIAL_DEMO_ACCOUNTS,
   reviews: INITIAL_DEMO_REVIEWS,
   policies: INITIAL_DEMO_POLICIES,
+  governanceControls: INITIAL_GOVERNANCE_CONTROLS,
   provisioningJobs: INITIAL_PROVISIONING_JOBS,
   importRuns: INITIAL_IMPORT_RUNS,
   emailNotifications: INITIAL_EMAIL_NOTIFICATIONS,
@@ -148,6 +188,367 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
   setSearchQuery: (q) => set({ searchQuery: q }),
   setSelectedPersonId: (id) => set({ selectedPersonId: id }),
   clearToast: () => set({ toastMessage: null }),
+
+  runRoleMiningDiscovery: () => {
+    const candidates = get().minedRoles.filter((m) => m.status === 'Recommended').length;
+    const outliers = get().miningOutliers.filter((o) => o.status === 'Flagged').length;
+    set((s) => ({
+      toastMessage: `Role Mining analyzed 500 identities: ${candidates} role recommendation(s) and ${outliers} peer outlier(s) refreshed.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: timeNow(),
+          actor: 'Role Mining Engine',
+          processTag: 'MINE-RUN',
+          tone: 'sky',
+          action: `Clustered 500 identities · ${candidates} recommended roles · ${outliers} outliers flagged`,
+          target: 'Entitlement Graph',
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  promoteMinedRole: (candidateId) => {
+    const cand = get().minedRoles.find((m) => m.id === candidateId);
+    if (!cand || cand.status === 'Promoted') return;
+
+    const today = new Date().toISOString().slice(0, 10);
+    const deptAttr =
+      cand.attributes.find((a) => a.label.toLowerCase().includes('department'))?.value ??
+      'Enterprise';
+
+    const newBusinessRole: DemoRole = {
+      id: `r-mined-${Date.now()}`,
+      name: cand.suggestedRoleName,
+      department: deptAttr,
+      description: `Promoted from Role Mining cluster ${cand.code} (${cand.confidenceScore}% confidence across ${cand.matchedIdentitiesCount} identities: ${cand.attributes.map((a) => `${a.label}=${a.value}`).join(', ')}).`,
+      members: cand.matchedIdentitiesCount,
+      entitlementsCount: cand.entitlements.length,
+      owner: 'Role Mining Governance',
+      sodSensitive: false,
+      includedApps: Array.from(new Set(cand.entitlements.map((e) => e.application))),
+      memberList: cand.simulationSample.map((sim, idx) => ({
+        id: `rm-mined-${Date.now()}-${idx}`,
+        name: sim.name,
+        email: `${sim.name.toLowerCase().replace(/\s+/g, '.')}@identra-corp.io`,
+        title: sim.title,
+        department: deptAttr,
+        assignmentSource: 'Birthright (HRIS)',
+        grantedOn: today,
+        status: 'Active',
+      })),
+      entitlementList: cand.entitlements.map((ent, idx) => ({
+        id: `re-mined-${Date.now()}-${idx}`,
+        name: ent.name,
+        application: ent.application,
+        type: ent.application.includes('SAP')
+          ? 'SAP Role'
+          : ent.application.includes('Active Directory')
+            ? 'AD Security Group'
+            : ent.application.includes('AWS')
+              ? 'AWS Permission Set'
+              : 'App Permission',
+        technicalId: ent.technicalId,
+        sensitivity: 'Standard',
+      })),
+    };
+
+    set((s) => ({
+      minedRoles: s.minedRoles.map((m) =>
+        m.id === candidateId ? { ...m, status: 'Promoted' } : m
+      ),
+      roles: [newBusinessRole, ...s.roles],
+      toastMessage: `Promoted "${cand.suggestedRoleName}" to live ${cand.roleKind}s (${cand.matchedIdentitiesCount} identities · ${cand.entitlements.length} entitlements).`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: timeNow(),
+          actor: 'Role Mining Engine',
+          processTag: 'ROLE-NEW',
+          tone: 'emerald',
+          action: `Promoted mined cluster ${cand.code} (${cand.confidenceScore}% confidence) into governed role`,
+          target: cand.suggestedRoleName,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  resolveMiningOutlier: (outlierId, action) => {
+    const out = get().miningOutliers.find((o) => o.id === outlierId);
+    if (!out || out.status !== 'Flagged') return;
+
+    const stamp = timeNow();
+    const today = new Date().toISOString().slice(0, 10);
+
+    const newReview: DemoReviewItem | null =
+      action === 'review'
+        ? {
+            id: `rev-out-${Date.now()}`,
+            identity: out.identityName,
+            identityTitle: out.peerCluster.split('(')[0].trim(),
+            department: out.peerCluster.split('·')[0].trim(),
+            accessType: 'Direct Entitlement',
+            roleOrEntitlement: out.outlierEntitlement,
+            technicalId: `OUTLIER_GRANT: ${out.outlierEntitlement}`,
+            parentBusinessRole: `Peer Outlier (${out.peerRatioLabel})`,
+            application: out.application,
+            reviewer: 'Line Manager',
+            workflowType: 'Manager Approval',
+            workflowCode: 'WF-REV-OUT-08',
+            triggeredBy: `Event: Role Mining Outlier Detection (${out.peerPrevalencePct}% peer prevalence)`,
+            triggeredAt: `${today} ${stamp.slice(0, 5)}`,
+            escalationPolicy: 'Auto-revoke after 5d SLA if uncertified',
+            workflowStages: [
+              { step: 'Stage 1', approverRole: 'Line Manager Approval', assignee: 'Department Manager', status: 'Active' },
+            ],
+            identitySnapshot: {
+              employeeNumber: out.employeeNumber,
+              email: `${out.identityName.toLowerCase().replace(/\s+/g, '.')}@identra-corp.io`,
+              location: 'Johannesburg',
+              contractType: 'Full-Time Permanent (FTE)',
+              manager: 'Department Manager',
+              riskScore: out.riskScore,
+              lastLogin: 'Today',
+              activeGrantsCount: 5,
+            },
+            entitlementDetails: {
+              description: out.reason,
+              owner: 'Application Governance',
+              ownerRole: 'Entitlement Owner',
+              sensitivity: 'Critical',
+              grantedOn: 'Ad-hoc Direct Assignment',
+              lastUsed: 'Flagged by Peer Outlier Model',
+              totalHolders: 1,
+              nestedPermissions: [out.outlierEntitlement],
+            },
+            risk: 'High',
+            usageSignal: `Only ${out.peerRatioLabel} (${out.peerPrevalencePct}%) hold this entitlement`,
+            aiRecommendation: 'Revoke',
+            reason: out.reason,
+            decision: 'Pending',
+          }
+        : null;
+
+    set((s) => ({
+      miningOutliers: s.miningOutliers.map((o) =>
+        o.id === outlierId
+          ? { ...o, status: action === 'revoke' ? 'Revoked' : 'Sent to Review' }
+          : o
+      ),
+      reviews: newReview ? [newReview, ...s.reviews] : s.reviews,
+      toastMessage:
+        action === 'revoke'
+          ? `Revoked outlier entitlement ${out.outlierEntitlement} from ${out.identityName}.`
+          : `Queued ${out.identityName}'s outlier access (${out.outlierEntitlement}) in Access Reviews.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'Role Mining Outliers',
+          processTag: action === 'revoke' ? 'OUT-CUT' : 'OUT-REV',
+          tone: action === 'revoke' ? 'emerald' : 'amber',
+          action:
+            action === 'revoke'
+              ? `Stripped peer outlier entitlement ${out.outlierEntitlement} (${out.peerRatioLabel})`
+              : `Escalated peer outlier ${out.outlierEntitlement} to Access Reviews`,
+          target: out.identityName,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  applyRoleOptimisation: (optId) => {
+    const opt = get().roleOptimisations.find((o) => o.id === optId);
+    if (!opt || opt.status === 'Optimised') return;
+
+    set((s) => ({
+      roleOptimisations: s.roleOptimisations.map((o) =>
+        o.id === optId ? { ...o, status: 'Optimised' } : o
+      ),
+      toastMessage: `Applied ${opt.category.toLowerCase()} role optimisation for "${opt.primaryRole}" (${opt.membersAffected} members remapped).`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: timeNow(),
+          actor: 'Role Optimisation',
+          processTag: 'ROLE-OPT',
+          tone: 'emerald',
+          action: `Consolidated/retired ${opt.category.toLowerCase()} role (${opt.entitlementsSaved} redundant grants removed)`,
+          target: opt.primaryRole,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  toggleGovernanceControlEnforcement: (controlId, level) => {
+    const ctrl = get().governanceControls.find((c) => c.id === controlId);
+    if (!ctrl) return;
+    const nextVal =
+      level === 'preventative' ? !ctrl.preventativeEnabled : !ctrl.detectiveEnabled;
+    const label = level === 'preventative' ? 'Preventative' : 'Detective';
+
+    set((s) => ({
+      governanceControls: s.governanceControls.map((c) =>
+        c.id === controlId
+          ? level === 'preventative'
+            ? { ...c, preventativeEnabled: nextVal }
+            : { ...c, detectiveEnabled: nextVal, lastScanAt: nextVal ? 'Just now' : c.lastScanAt }
+          : c
+      ),
+      toastMessage: `${nextVal ? 'Enabled' : 'Disabled'} ${label} enforcement on ${ctrl.code} (${ctrl.name}).`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: timeNow(),
+          actor: 'Governance Assurance',
+          processTag: 'GA-CTRL',
+          tone: nextVal ? 'emerald' : 'amber',
+          action: `${nextVal ? 'Enabled' : 'Disabled'} ${label} control mode on ${ctrl.code}`,
+          target: ctrl.name,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  remediateGovernanceViolation: (controlId, violationId) => {
+    const ctrl = get().governanceControls.find((c) => c.id === controlId);
+    const viol = ctrl?.violations.find((v) => v.id === violationId);
+    if (!ctrl || !viol || viol.resolved) return;
+
+    set((s) => ({
+      governanceControls: s.governanceControls.map((c) =>
+        c.id === controlId
+          ? {
+              ...c,
+              lastScanAt: 'Just now',
+              violations: c.violations.map((v) =>
+                v.id === violationId ? { ...v, resolved: true } : v
+              ),
+            }
+          : c
+      ),
+      toastMessage: `Remediated ${ctrl.code} violation on "${viol.objectName}": ${viol.suggestedFix}.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: timeNow(),
+          actor: 'Governance Assurance',
+          processTag: 'GA-FIX',
+          tone: 'emerald',
+          action: `Resolved ${ctrl.code} (${ctrl.name}) — ${viol.suggestedFix}`,
+          target: viol.objectName,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  remediateAllControlViolations: (controlId) => {
+    const ctrl = get().governanceControls.find((c) => c.id === controlId);
+    if (!ctrl) return;
+    const openCount = ctrl.violations.filter((v) => !v.resolved).length;
+    if (openCount === 0) return;
+
+    set((s) => ({
+      governanceControls: s.governanceControls.map((c) =>
+        c.id === controlId
+          ? {
+              ...c,
+              lastScanAt: 'Just now',
+              violations: c.violations.map((v) => ({ ...v, resolved: true })),
+            }
+          : c
+      ),
+      toastMessage: `Auto-remediated all ${openCount} violation(s) for ${ctrl.code} (${ctrl.name}) — control is now Compliant.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: timeNow(),
+          actor: 'Governance Assurance',
+          processTag: 'GA-BATCH',
+          tone: 'emerald',
+          action: `Remediated ${openCount} violations on ${ctrl.code}; status restored to Compliant`,
+          target: ctrl.name,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  runGovernanceDetectiveScan: () => {
+    const controls = get().governanceControls;
+    const detectiveCount = controls.filter((c) => c.detectiveEnabled).length;
+    const activeViolations = controls.reduce(
+      (sum, c) =>
+        sum + (c.detectiveEnabled ? c.violations.filter((v) => !v.resolved).length : 0),
+      0
+    );
+
+    set((s) => ({
+      governanceControls: s.governanceControls.map((c) =>
+        c.detectiveEnabled ? { ...c, lastScanAt: 'Just now' } : c
+      ),
+      toastMessage: `Completed Detective Assurance scan across ${detectiveCount} controls — ${activeViolations} active governance violation(s) flagged.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: timeNow(),
+          actor: 'Assurance Scanner',
+          processTag: 'GA-SCAN',
+          tone: activeViolations === 0 ? 'emerald' : 'sky',
+          action: `Completed full Detective scan across ${detectiveCount} controls (${activeViolations} violations)`,
+          target: 'Platform Health',
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  addGovernanceControl: (input) => {
+    const nextNum = get().governanceControls.length + 1;
+    const code = `GA-CTRL-${String(nextNum).padStart(2, '0')}`;
+    const newControl: DemoGovernanceControl = {
+      id: `ga-custom-${Date.now()}`,
+      code,
+      name: input.name,
+      description: input.description,
+      domain: input.domain,
+      severity: input.severity,
+      preventativeEnabled: input.preventativeEnabled,
+      detectiveEnabled: input.detectiveEnabled,
+      totalEvaluated: 1420,
+      evaluatedUnit: 'governed objects',
+      lastScanAt: 'Just now',
+      preventativeTestExample: {
+        attemptedAction: `Submit non-compliant record violating "${input.name}"`,
+        blockedMessage: `BLOCKED BY ${code} (Preventative): Change rejected automatically to preserve "${input.name}".`,
+        allowedMessage: `ALLOWED (Preventative Off): Non-compliant record saved — Detective scan will flag violation under ${code}.`,
+      },
+      violations: [],
+    };
+
+    set((s) => ({
+      governanceControls: [newControl, ...s.governanceControls],
+      toastMessage: `Created configurable Governance Control ${code} (${newControl.name}).`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: timeNow(),
+          actor: 'Governance Assurance',
+          processTag: 'GA-NEW',
+          tone: 'sky',
+          action: `Created Governance Control ${code} (Prev: ${newControl.preventativeEnabled ? 'ON' : 'OFF'} · Det: ${newControl.detectiveEnabled ? 'ON' : 'OFF'})`,
+          target: newControl.name,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
 
   updateSmtpConfig: (patch) => {
     const nextSmtp: SmtpConfig = {
@@ -1669,10 +2070,14 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
       applications: INITIAL_DEMO_APPS,
       entitlements: INITIAL_DEMO_ENTITLEMENTS,
       roles: INITIAL_DEMO_ROLES,
+      minedRoles: INITIAL_MINED_ROLES,
+      miningOutliers: INITIAL_MINING_OUTLIERS,
+      roleOptimisations: INITIAL_ROLE_OPTIMISATIONS,
       birthrights: INITIAL_DEMO_BIRTHRIGHTS,
       accounts: INITIAL_DEMO_ACCOUNTS,
       reviews: INITIAL_DEMO_REVIEWS,
       policies: INITIAL_DEMO_POLICIES,
+      governanceControls: INITIAL_GOVERNANCE_CONTROLS,
       provisioningJobs: INITIAL_PROVISIONING_JOBS,
       importRuns: INITIAL_IMPORT_RUNS,
       emailNotifications: INITIAL_EMAIL_NOTIFICATIONS,

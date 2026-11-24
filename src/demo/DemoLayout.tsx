@@ -25,6 +25,8 @@ import {
   Settings,
   Shield,
   ShieldAlert,
+  ShieldCheck,
+  Sparkles,
   Users,
   X,
 } from 'lucide-react';
@@ -39,12 +41,14 @@ import {
   EntitlementsView,
   RolesView,
 } from '@/demo/views/AccessViews';
+import { RoleMiningView } from '@/demo/views/RoleMiningView';
 import { BirthrightsView } from '@/demo/views/BirthrightsView';
 import {
   AccessReviewsView,
   ComplianceView,
   PoliciesSodView,
 } from '@/demo/views/GovernanceViews';
+import { GovernanceAssuranceView } from '@/demo/views/GovernanceAssuranceView';
 import { ReportingView } from '@/demo/views/ReportingView';
 import {
   AuditLogView,
@@ -84,12 +88,14 @@ const SIDEBAR_NAV: NavGroup[] = [
       { id: 'applications', label: 'Applications', icon: Box },
       { id: 'entitlements', label: 'Entitlements', icon: KeyRound },
       { id: 'roles', label: 'Roles', icon: Shield },
+      { id: 'role-mining', label: 'Role Mining', icon: Sparkles },
       { id: 'birthrights', label: 'Birthrights', icon: GitMerge },
     ],
   },
   {
     group: 'GOVERNANCE',
     items: [
+      { id: 'governance-assurance', label: 'Governance Assurance', icon: ShieldCheck },
       { id: 'access-reviews', label: 'Access reviews', icon: ClipboardCheck },
       { id: 'policies-sod', label: 'Policies & SoD', icon: ShieldAlert },
       { id: 'compliance', label: 'Compliance', icon: FileCheck2 },
@@ -173,6 +179,16 @@ export function DemoLayout() {
         (e) => e.status === 'Bounced' || e.status === 'Failed'
       ).length
   );
+  const assuranceViolations = useDemoStore((s) =>
+    s.governanceControls.reduce(
+      (sum, c) =>
+        sum + (c.detectiveEnabled ? c.violations.filter((v) => !v.resolved).length : 0),
+      0
+    )
+  );
+  const miningOutliersCount = useDemoStore(
+    (s) => s.miningOutliers.filter((o) => o.status === 'Flagged').length
+  );
 
   // Auto-dismiss live Process++ toast notifications
   useEffect(() => {
@@ -184,6 +200,8 @@ export function DemoLayout() {
   const crumb = getBreadcrumb(activeSection);
 
   const badgeFor = (id: DemoSectionId): number | null => {
+    if (id === 'role-mining' && miningOutliersCount > 0) return miningOutliersCount;
+    if (id === 'governance-assurance' && assuranceViolations > 0) return assuranceViolations;
     if (id === 'access-reviews' && pendingReviews > 0) return pendingReviews;
     if (id === 'policies-sod' && activeViolations > 0) return activeViolations;
     if (id === 'entitlements' && driftEntitlements > 0) return driftEntitlements;
@@ -208,8 +226,12 @@ export function DemoLayout() {
         return <EntitlementsView />;
       case 'roles':
         return <RolesView />;
+      case 'role-mining':
+        return <RoleMiningView />;
       case 'birthrights':
         return <BirthrightsView />;
+      case 'governance-assurance':
+        return <GovernanceAssuranceView />;
       case 'access-reviews':
         return <AccessReviewsView />;
       case 'policies-sod':
