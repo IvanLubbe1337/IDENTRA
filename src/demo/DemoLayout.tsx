@@ -27,6 +27,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Sparkles,
+  UserPlus,
   Users,
   X,
 } from 'lucide-react';
@@ -55,6 +56,7 @@ import {
   LifecycleView,
   WorkflowsView,
 } from '@/demo/views/AutomationViews';
+import { OnboardingView } from '@/demo/views/OnboardingView';
 import { ProvisioningEngineView } from '@/demo/views/ProvisioningEngineView';
 import { ImportsView } from '@/demo/views/ImportsView';
 import { EmailNotificationsView } from '@/demo/views/EmailNotificationsView';
@@ -105,6 +107,7 @@ const SIDEBAR_NAV: NavGroup[] = [
   {
     group: 'AUTOMATION',
     items: [
+      { id: 'onboarding', label: 'Onboarding', icon: UserPlus },
       { id: 'lifecycle', label: 'Lifecycle', icon: RefreshCw },
       { id: 'workflows', label: 'Workflows', icon: GitBranch },
     ],
@@ -189,6 +192,11 @@ export function DemoLayout() {
   const miningOutliersCount = useDemoStore(
     (s) => s.miningOutliers.filter((o) => o.status === 'Flagged').length
   );
+  const pendingOnboarding = useDemoStore(
+    (s) =>
+      s.contractorRequests.filter((r) => r.status === 'Pending Approval').length +
+      s.entitlementRequests.filter((r) => r.status === 'Pending Approval').length
+  );
 
   // Auto-dismiss live Process++ toast notifications
   useEffect(() => {
@@ -200,6 +208,7 @@ export function DemoLayout() {
   const crumb = getBreadcrumb(activeSection);
 
   const badgeFor = (id: DemoSectionId): number | null => {
+    if (id === 'onboarding' && pendingOnboarding > 0) return pendingOnboarding;
     if (id === 'role-mining' && miningOutliersCount > 0) return miningOutliersCount;
     if (id === 'governance-assurance' && assuranceViolations > 0) return assuranceViolations;
     if (id === 'access-reviews' && pendingReviews > 0) return pendingReviews;
@@ -240,6 +249,8 @@ export function DemoLayout() {
         return <ComplianceView />;
       case 'reporting':
         return <ReportingView />;
+      case 'onboarding':
+        return <OnboardingView />;
       case 'lifecycle':
         return <LifecycleView />;
       case 'workflows':

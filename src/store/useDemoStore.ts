@@ -1,5 +1,8 @@
 import { create } from 'zustand';
 import {
+  CONTRACTOR_ONBOARDING_WORKFLOWS,
+  ENTITLEMENT_ONBOARDING_WORKFLOWS,
+  INITIAL_CONTRACTOR_REQUESTS,
   INITIAL_DEMO_ACCOUNTS,
   INITIAL_DEMO_APPS,
   INITIAL_DEMO_AUDIT,
@@ -11,6 +14,7 @@ import {
   INITIAL_DEMO_REVIEWS,
   INITIAL_DEMO_ROLES,
   INITIAL_EMAIL_NOTIFICATIONS,
+  INITIAL_ENTITLEMENT_REQUESTS,
   INITIAL_GOVERNANCE_CONTROLS,
   INITIAL_IMPORT_RUNS,
   INITIAL_MINED_ROLES,
@@ -24,8 +28,10 @@ import {
   type DemoApplication,
   type DemoAuditEntry,
   type DemoBirthrightRule,
+  type DemoContractorOnboardingRequest,
   type DemoEmailNotification,
   type DemoEntitlement,
+  type DemoEntitlementOnboardingRequest,
   type DemoGovernanceControl,
   type DemoImportRun,
   type DemoMinedRoleCandidate,
@@ -41,6 +47,7 @@ import {
   type DemoTargetAccount,
   type GovernanceControlDomain,
   type MasterEmailTemplateConfig,
+  type OnboardingApprovalStage,
   type PlatformConfig,
   type SmtpConfig,
 } from '@/data/demoSampleData';
@@ -52,6 +59,7 @@ function timeNow(): string {
 
 interface DemoStore {
   activeSection: DemoSectionId;
+  onboardingTab: 'contractor' | 'entitlement';
   searchQuery: string;
   selectedPersonId: string | null;
   toastMessage: string | null;
@@ -69,6 +77,8 @@ interface DemoStore {
   reviews: DemoReviewItem[];
   policies: DemoPolicy[];
   governanceControls: DemoGovernanceControl[];
+  contractorRequests: DemoContractorOnboardingRequest[];
+  entitlementRequests: DemoEntitlementOnboardingRequest[];
   provisioningJobs: DemoProvisioningJob[];
   importRuns: DemoImportRun[];
   emailNotifications: DemoEmailNotification[];
@@ -76,9 +86,54 @@ interface DemoStore {
   auditLog: DemoAuditEntry[];
 
   setActiveSection: (section: DemoSectionId) => void;
+  openOnboardingTab: (tab: 'contractor' | 'entitlement') => void;
   setSearchQuery: (q: string) => void;
   setSelectedPersonId: (id: string | null) => void;
   clearToast: () => void;
+
+  // Contractor & Entitlement Onboarding Approval Workflow actions
+  submitContractorOnboarding: (input: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    vendorCompany: string;
+    title: string;
+    department: string;
+    departmentRefId: string;
+    costCenterCode: string;
+    location: string;
+    sponsorName: string;
+    sponsorRefId: string;
+    startDate: string;
+    endDate: string;
+    durationDays: number;
+    ndaVerified: boolean;
+    justification: string;
+    workflowId: string;
+  }) => void;
+  advanceContractorApproval: (
+    requestId: string,
+    decision: 'approve-stage' | 'approve-all' | 'reject'
+  ) => void;
+
+  submitEntitlementOnboarding: (input: {
+    entitlementName: string;
+    technicalId: string;
+    application: string;
+    entitlementType: DemoEntitlementOnboardingRequest['entitlementType'];
+    owner: string;
+    sensitivity: 'Standard' | 'High' | 'Critical';
+    recertificationDays: 90 | 180 | 365;
+    requestableInCatalog: boolean;
+    sodChecked: boolean;
+    sodConflictNote?: string;
+    description: string;
+    workflowId: string;
+  }) => void;
+  advanceEntitlementApproval: (
+    requestId: string,
+    decision: 'approve-stage' | 'approve-all' | 'reject'
+  ) => void;
 
   // Governance Assurance actions
   toggleGovernanceControlEnforcement: (
@@ -161,6 +216,7 @@ interface DemoStore {
 
 export const useDemoStore = create<DemoStore>((set, get) => ({
   activeSection: 'dashboard',
+  onboardingTab: 'contractor',
   searchQuery: '',
   selectedPersonId: null,
   toastMessage: null,
@@ -178,6 +234,8 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
   reviews: INITIAL_DEMO_REVIEWS,
   policies: INITIAL_DEMO_POLICIES,
   governanceControls: INITIAL_GOVERNANCE_CONTROLS,
+  contractorRequests: INITIAL_CONTRACTOR_REQUESTS,
+  entitlementRequests: INITIAL_ENTITLEMENT_REQUESTS,
   provisioningJobs: INITIAL_PROVISIONING_JOBS,
   importRuns: INITIAL_IMPORT_RUNS,
   emailNotifications: INITIAL_EMAIL_NOTIFICATIONS,
@@ -185,9 +243,600 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
   auditLog: INITIAL_DEMO_AUDIT,
 
   setActiveSection: (section) => set({ activeSection: section }),
+  openOnboardingTab: (tab) => set({ activeSection: 'onboarding', onboardingTab: tab }),
   setSearchQuery: (q) => set({ searchQuery: q }),
   setSelectedPersonId: (id) => set({ selectedPersonId: id }),
   clearToast: () => set({ toastMessage: null }),
+
+  submitContractorOnboarding: (input) => {
+    const wf =
+      CONTRACTOR_ONBOARDING_WORKFLOWS.find((w) => w.id === input.workflowId) ??
+      CONTRACTOR_ONBOARDING_WORKFLOWS[0];
+    const today = new Date().toISOString().slice(0, 10);
+    const stamp = timeNow();
+    const reqCode = `CTR-REQ-${402 + get().contractorRequests.length}`;
+    const fullName = `${input.firstName.trim()} ${input.lastName.trim()}`;
+
+    const stages: OnboardingApprovalStage[] = wf.stages.map((st, idx) => ({
+      step: `Stage ${idx + 1}`,
+      approverRole: st.approverRole,
+      assignee: st.assignee === 'Selected Sponsor' ? input.sponsorName : st.assignee,
+      status: idx === 0 ? 'Pending' : 'Queued',
+    }));
+
+    const newReq: DemoContractorOnboardingRequest = {
+      id: `ctr-req-${Date.now()}`,
+      requestCode: reqCode,
+      ...input,
+      firstName: input.firstName.trim(),
+      lastName: input.lastName.trim(),
+      email: input.email.trim().toLowerCase(),
+      workflowCode: wf.code,
+      workflowName: wf.name,
+      stages,
+      status: 'Pending Approval',
+      submittedAt: `${today} ${stamp.slice(0, 5)}`,
+    };
+
+    const { smtp, emailTemplate } = get().platformConfig;
+    const msgCode = `EML-${7049 + get().emailNotifications.length}`;
+    const sponsorEmail = `${input.sponsorName.toLowerCase().replace(/\s+/g, '.')}@identra-corp.io`;
+    const tplData: BrandedEmailTemplateInput = {
+      badgeText: `APPROVAL REQUIRED · ${wf.code}`,
+      badgeTone: 'sky',
+      headline: `Contractor Onboarding Approval Needed: ${fullName}`,
+      greeting: `Hi ${stages[0].assignee},`,
+      intro: `A new external contractor onboarding request (${reqCode}) has been submitted and requires your Stage 1 approval under workflow "${wf.name}" before the identity is created.`,
+      metadataRows: [
+        { label: 'Request Code', value: reqCode, mono: true },
+        { label: 'Contractor', value: `${fullName} (${input.title})` },
+        { label: 'Vendor Partner', value: input.vendorCompany },
+        { label: 'Contract Window', value: `${input.startDate} → ${input.endDate} (${input.durationDays}d)`, mono: true },
+        { label: 'Selected Workflow', value: `${wf.name} (${wf.code})`, mono: true },
+        { label: 'Internal Sponsor', value: input.sponsorName },
+      ],
+      calloutTitle: 'Pre-Creation Governance Gate Active',
+      calloutText: `No accounts will be created until all ${stages.length} approval stage(s) are completed. NDA & background clearance verified.`,
+      ctaLabel: 'Review & Approve Onboarding',
+      ctaUrl: 'https://identra-two.vercel.app/#demo',
+      messageCode: msgCode,
+      timestamp: `${today} ${stamp}`,
+    };
+
+    const emailNotif: DemoEmailNotification = {
+      id: `eml-ctr-req-${Date.now()}`,
+      messageCode: msgCode,
+      timestamp: `${today} ${stamp}`,
+      status: 'Delivered',
+      trigger: `Contractor Onboarding Submitted · ${wf.name} (${wf.code})`,
+      triggerCategory: 'JML Lifecycle',
+      recipientName: stages[0].assignee,
+      recipientEmail: sponsorEmail,
+      recipientRole: stages[0].approverRole,
+      from: `${smtp.fromName} <${smtp.fromEmail}>`,
+      subject: `Approval Required (${reqCode}): Onboard Contractor ${fullName}`,
+      smtpProvider: `${smtp.host}:${smtp.port} · ${smtp.encryption}`,
+      deliveryLatencyMs: 205,
+      templateData: tplData,
+      htmlBody: buildBrandedIdentraEmailHtml(tplData, emailTemplate),
+    };
+
+    set((s) => ({
+      contractorRequests: [newReq, ...s.contractorRequests],
+      emailNotifications: [emailNotif, ...s.emailNotifications],
+      toastMessage: `Submitted ${reqCode} for ${fullName} — awaiting ${wf.name} approval before contractor creation.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'Onboarding Portal',
+          processTag: 'CTR-REQ',
+          tone: 'sky',
+          action: `Submitted contractor onboarding (${reqCode}) via ${wf.code} (${wf.name})`,
+          target: fullName,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  advanceContractorApproval: (requestId, decision) => {
+    const req = get().contractorRequests.find((r) => r.id === requestId);
+    if (!req || req.status !== 'Pending Approval') return;
+
+    const today = new Date().toISOString().slice(0, 10);
+    const stamp = timeNow();
+    const fullName = `${req.firstName} ${req.lastName}`;
+    const pendingIdx = req.stages.findIndex((st) => st.status === 'Pending');
+    if (pendingIdx === -1) return;
+
+    if (decision === 'reject') {
+      const rejectedStages = req.stages.map((st, idx) =>
+        idx === pendingIdx
+          ? { ...st, status: 'Rejected' as const, decidedAt: `${today} ${stamp.slice(0, 5)}` }
+          : st
+      );
+      set((s) => ({
+        contractorRequests: s.contractorRequests.map((r) =>
+          r.id === requestId
+            ? { ...r, stages: rejectedStages, status: 'Rejected' }
+            : r
+        ),
+        toastMessage: `Rejected contractor onboarding ${req.requestCode} (${fullName}) — no identity or accounts created.`,
+        auditLog: [
+          {
+            id: `aud-${Date.now()}`,
+            time: stamp,
+            actor: req.stages[pendingIdx].assignee,
+            processTag: 'CTR-REJ',
+            tone: 'rose',
+            action: `Rejected ${req.requestCode} at ${req.stages[pendingIdx].step} (${req.workflowCode})`,
+            target: fullName,
+          },
+          ...s.auditLog,
+        ],
+      }));
+      return;
+    }
+
+    const approveAll = decision === 'approve-all';
+    const nextStages: OnboardingApprovalStage[] = req.stages.map((st, idx) => {
+      if (approveAll) {
+        return st.status === 'Approved'
+          ? st
+          : { ...st, status: 'Approved', decidedAt: `${today} ${stamp.slice(0, 5)}` };
+      }
+      if (idx === pendingIdx) {
+        return { ...st, status: 'Approved', decidedAt: `${today} ${stamp.slice(0, 5)}` };
+      }
+      if (idx === pendingIdx + 1) {
+        return { ...st, status: 'Pending' };
+      }
+      return st;
+    });
+
+    const allApproved = nextStages.every((st) => st.status === 'Approved');
+
+    if (!allApproved) {
+      const nextPending = nextStages.find((st) => st.status === 'Pending');
+      set((s) => ({
+        contractorRequests: s.contractorRequests.map((r) =>
+          r.id === requestId ? { ...r, stages: nextStages } : r
+        ),
+        toastMessage: `Approved ${req.stages[pendingIdx].step} for ${req.requestCode} — routed to ${nextPending?.approverRole ?? 'next stage'}.`,
+        auditLog: [
+          {
+            id: `aud-${Date.now()}`,
+            time: stamp,
+            actor: req.stages[pendingIdx].assignee,
+            processTag: 'CTR-APR',
+            tone: 'sky',
+            action: `Approved ${req.stages[pendingIdx].step} of ${req.requestCode}; awaiting ${nextPending?.approverRole}`,
+            target: fullName,
+          },
+          ...s.auditLog,
+        ],
+      }));
+      return;
+    }
+
+    // Final stage approved -> CREATE the Contractor identity, account, provisioning job & confirmation email!
+    const ctrNumber = `CTR-${90220 + get().people.length}`;
+    const sam = `${req.firstName[0] ?? 'c'}${req.lastName}`.toLowerCase().replace(/[^a-z0-9]/g, '') + '_ext';
+    const newPersonId = `p-ctr-${Date.now()}`;
+    const newContractor: DemoPerson = {
+      id: newPersonId,
+      firstName: req.firstName,
+      lastName: req.lastName,
+      name: fullName,
+      employeeNumber: ctrNumber,
+      email: req.email,
+      upn: `${sam}#EXT#@corp.identra.net`,
+      samAccountName: sam,
+      title: req.title,
+      department: req.department,
+      departmentRefId: req.departmentRefId,
+      companyName: req.vendorCompany,
+      companyRefId: 'comp-ext-audit',
+      orgUnitName: 'External Contractors & Auditors',
+      orgUnitRefId: 'ou-ext-contractors',
+      costCenterCode: req.costCenterCode,
+      costCenterRefId: 'cc-9001',
+      location: req.location,
+      type: 'Contractor',
+      contractType: `Fixed-Term External Contractor (${req.durationDays}d)`,
+      hrStartDate: req.startDate,
+      hrEndDate: req.endDate,
+      sourceSystem: 'B2B Partner Lifecycle Portal',
+      sourceRefId: 'src-b2b',
+      sourceExternalId: req.requestCode,
+      lastHrSync: `Today · ${stamp}`,
+      jmlStatus: 'Joiner',
+      riskScore: 18,
+      roles: ['External B2B Guest Profile', 'Corporate SSO Standard'],
+      applications: ['Active Directory', 'Microsoft Entra ID'],
+      manager: req.sponsorName,
+      managerRefId: req.sponsorRefId,
+      contextRefIds: ['ctx-ext-audit'],
+      lastAttestation: `Approved via ${req.workflowCode} (${req.workflowName})`,
+      changeHistory: [
+        {
+          id: `h-ctr-${Date.now()}`,
+          timestamp: `${today} ${stamp}`,
+          source: `Contractor Onboarding (${req.workflowCode})`,
+          category: 'JML Lifecycle',
+          summary: `Contractor ${ctrNumber} created after completing ${req.stages.length}-stage workflow "${req.workflowName}". Auto-expiry locked to ${req.endDate}.`,
+          changes: [
+            { field: 'identityType', before: null, after: 'Contractor (B2B)' },
+            { field: 'approvalWorkflow', before: null, after: `${req.workflowName} (${req.workflowCode})` },
+            { field: 'contractWindow', before: null, after: `${req.startDate} → ${req.endDate}` },
+            { field: 'sponsor', before: null, after: req.sponsorName },
+          ],
+        },
+      ],
+    };
+
+    const newAccount: DemoTargetAccount = {
+      id: `acc-ctr-${Date.now()}`,
+      accountName: newContractor.upn,
+      application: 'Microsoft Entra ID',
+      accountType: 'Contractor',
+      personId: newPersonId,
+      correlatedIdentity: fullName,
+      correlationState: 'Correlated',
+      accountStatus: 'Enabled',
+      privileged: false,
+      lastLogin: 'Provisioned just now',
+      daysInactive: 0,
+      riskScore: 18,
+    };
+
+    const newProvJob: DemoProvisioningJob = {
+      id: `job-ctr-${Date.now()}`,
+      jobCode: `PRV-${9140 + get().provisioningJobs.length}`,
+      identity: fullName,
+      identityEmail: req.email,
+      entitlementOrRole: `Entra B2B Guest + AD OU=Contractors (${req.requestCode})`,
+      application: 'Active Directory',
+      operation: 'Create',
+      status: 'Completed',
+      triggeredBy: `Contractor Onboarding (${req.workflowCode})`,
+      timestamp: stamp,
+      durationMs: 245,
+      mappings: [
+        { attribute: 'sAMAccountName', before: null, after: sam, rule: 'B2B.Contractor.SamGen' },
+        { attribute: 'accountExpires', before: null, after: req.endDate, rule: 'B2B.HardExpiry.Enforced' },
+        { attribute: 'distinguishedName', before: null, after: 'OU=Contractors,DC=identra,DC=corp', rule: 'BR-006.QuarantineOU' },
+      ],
+    };
+
+    const { smtp, emailTemplate } = get().platformConfig;
+    const msgCode = `EML-${7049 + get().emailNotifications.length}`;
+    const tplData: BrandedEmailTemplateInput = {
+      badgeText: 'CONTRACTOR ONBOARDED',
+      badgeTone: 'emerald',
+      headline: `Welcome ${req.firstName} — Your B2B Contractor Account Is Active`,
+      greeting: `Hello ${fullName},`,
+      intro: `All approval stages under ${req.workflowName} (${req.workflowCode}) have been completed. Your federated contractor identity (${ctrNumber}) has been provisioned in OU=Contractors with hard expiry on ${req.endDate}.`,
+      metadataRows: [
+        { label: 'Contractor ID', value: ctrNumber, mono: true },
+        { label: 'Federated UPN', value: newContractor.upn, mono: true },
+        { label: 'Vendor Partner', value: req.vendorCompany },
+        { label: 'Accountable Sponsor', value: req.sponsorName },
+        { label: 'Auto-Offboard Date', value: req.endDate, mono: true },
+      ],
+      calloutTitle: 'Time-Bound Access Governance',
+      calloutText: `In accordance with policy JML-OFF-001, your access will automatically deactivate at 23:59 UTC on ${req.endDate} unless extended by ${req.sponsorName}.`,
+      ctaLabel: 'Activate B2B Guest Access',
+      ctaUrl: 'https://identra-two.vercel.app/#demo',
+      messageCode: msgCode,
+      timestamp: `${today} ${stamp}`,
+    };
+
+    const welcomeEmail: DemoEmailNotification = {
+      id: `eml-ctr-ok-${Date.now()}`,
+      messageCode: msgCode,
+      timestamp: `${today} ${stamp}`,
+      status: 'Delivered',
+      trigger: `Contractor Approved & Created · ${req.requestCode} (${req.workflowCode})`,
+      triggerCategory: 'JML Lifecycle',
+      recipientName: fullName,
+      recipientEmail: req.email,
+      recipientRole: `External Contractor (${req.vendorCompany})`,
+      cc: [`${req.sponsorName.toLowerCase().replace(/\s+/g, '.')}@identra-corp.io`],
+      from: `${smtp.fromName} <${smtp.fromEmail}>`,
+      subject: `Contractor Onboarding Complete — ${fullName} (${ctrNumber})`,
+      smtpProvider: `${smtp.host}:${smtp.port} · ${smtp.encryption}`,
+      deliveryLatencyMs: 218,
+      templateData: tplData,
+      htmlBody: buildBrandedIdentraEmailHtml(tplData, emailTemplate),
+    };
+
+    set((s) => ({
+      contractorRequests: s.contractorRequests.map((r) =>
+        r.id === requestId
+          ? {
+              ...r,
+              stages: nextStages,
+              status: 'Approved & Created',
+              createdPersonId: newPersonId,
+            }
+          : r
+      ),
+      people: [newContractor, ...s.people],
+      accounts: [newAccount, ...s.accounts],
+      provisioningJobs: [newProvJob, ...s.provisioningJobs],
+      emailNotifications: [welcomeEmail, ...s.emailNotifications],
+      toastMessage: `Approved ${req.requestCode} — created contractor ${fullName} (${ctrNumber}) in People & provisioned B2B accounts.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'Contractor Onboarding',
+          processTag: 'CTR-NEW',
+          tone: 'emerald',
+          action: `Completed ${req.workflowCode} approval & created contractor ${ctrNumber} (expires ${req.endDate})`,
+          target: fullName,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  submitEntitlementOnboarding: (input) => {
+    const wf =
+      ENTITLEMENT_ONBOARDING_WORKFLOWS.find((w) => w.id === input.workflowId) ??
+      ENTITLEMENT_ONBOARDING_WORKFLOWS[0];
+    const today = new Date().toISOString().slice(0, 10);
+    const stamp = timeNow();
+    const reqCode = `ENT-REQ-${810 + get().entitlementRequests.length}`;
+
+    const stages: OnboardingApprovalStage[] = wf.stages.map((st, idx) => ({
+      step: `Stage ${idx + 1}`,
+      approverRole: st.approverRole,
+      assignee: st.assignee === 'Selected Owner' ? input.owner : st.assignee,
+      status: idx === 0 ? 'Pending' : 'Queued',
+    }));
+
+    const newReq: DemoEntitlementOnboardingRequest = {
+      id: `ent-req-${Date.now()}`,
+      requestCode: reqCode,
+      ...input,
+      entitlementName: input.entitlementName.trim(),
+      technicalId: input.technicalId.trim(),
+      workflowCode: wf.code,
+      workflowName: wf.name,
+      stages,
+      status: 'Pending Approval',
+      submittedAt: `${today} ${stamp.slice(0, 5)}`,
+    };
+
+    const { smtp, emailTemplate } = get().platformConfig;
+    const msgCode = `EML-${7049 + get().emailNotifications.length}`;
+    const tplData: BrandedEmailTemplateInput = {
+      badgeText: `ENTITLEMENT APPROVAL · ${wf.code}`,
+      badgeTone: input.sensitivity === 'Critical' ? 'amber' : 'sky',
+      headline: `New Entitlement Onboarding Request: ${newReq.entitlementName}`,
+      greeting: `Hi ${stages[0].assignee},`,
+      intro: `A request to onboard "${newReq.entitlementName}" into the IDENTRA Entitlements Catalog has passed pre-submission governance validation and requires your approval under "${wf.name}".`,
+      metadataRows: [
+        { label: 'Request Code', value: reqCode, mono: true },
+        { label: 'Entitlement Name', value: newReq.entitlementName, mono: true },
+        { label: 'Target Application', value: newReq.application },
+        { label: 'Accountable Owner', value: newReq.owner },
+        { label: 'Sensitivity & SLA', value: `${newReq.sensitivity} · Recertify every ${newReq.recertificationDays}d`, mono: true },
+        { label: 'Selected Workflow', value: `${wf.name} (${wf.code})`, mono: true },
+      ],
+      calloutTitle: 'Governance Assurance GA-CTRL-01 Verified',
+      calloutText: `Accountable owner (${newReq.owner}), technical ID, and sensitivity recertification cadence validated before approval routing.`,
+      ctaLabel: 'Review Entitlement Request',
+      ctaUrl: 'https://identra-two.vercel.app/#demo',
+      messageCode: msgCode,
+      timestamp: `${today} ${stamp}`,
+    };
+
+    const emailNotif: DemoEmailNotification = {
+      id: `eml-ent-req-${Date.now()}`,
+      messageCode: msgCode,
+      timestamp: `${today} ${stamp}`,
+      status: 'Delivered',
+      trigger: `Entitlement Onboarding Submitted · ${wf.name} (${wf.code})`,
+      triggerCategory: 'Access Review',
+      recipientName: stages[0].assignee,
+      recipientEmail: 'app-governance@identra-corp.io',
+      recipientRole: stages[0].approverRole,
+      from: `${smtp.fromName} <${smtp.fromEmail}>`,
+      subject: `Approval Required (${reqCode}): Onboard Entitlement ${newReq.entitlementName}`,
+      smtpProvider: `${smtp.host}:${smtp.port} · ${smtp.encryption}`,
+      deliveryLatencyMs: 189,
+      templateData: tplData,
+      htmlBody: buildBrandedIdentraEmailHtml(tplData, emailTemplate),
+    };
+
+    set((s) => ({
+      entitlementRequests: [newReq, ...s.entitlementRequests],
+      emailNotifications: [emailNotif, ...s.emailNotifications],
+      toastMessage: `Submitted ${reqCode} for "${newReq.entitlementName}" — awaiting ${wf.name} approval before catalog creation.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'Entitlement Onboarding',
+          processTag: 'ENT-REQ',
+          tone: 'sky',
+          action: `Submitted entitlement onboarding (${reqCode}) via ${wf.code} (${wf.name})`,
+          target: newReq.entitlementName,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  advanceEntitlementApproval: (requestId, decision) => {
+    const req = get().entitlementRequests.find((r) => r.id === requestId);
+    if (!req || req.status !== 'Pending Approval') return;
+
+    const today = new Date().toISOString().slice(0, 10);
+    const stamp = timeNow();
+    const pendingIdx = req.stages.findIndex((st) => st.status === 'Pending');
+    if (pendingIdx === -1) return;
+
+    if (decision === 'reject') {
+      const rejectedStages = req.stages.map((st, idx) =>
+        idx === pendingIdx
+          ? { ...st, status: 'Rejected' as const, decidedAt: `${today} ${stamp.slice(0, 5)}` }
+          : st
+      );
+      set((s) => ({
+        entitlementRequests: s.entitlementRequests.map((r) =>
+          r.id === requestId
+            ? { ...r, stages: rejectedStages, status: 'Rejected' }
+            : r
+        ),
+        toastMessage: `Rejected entitlement onboarding ${req.requestCode} (${req.entitlementName}) — not added to catalog.`,
+        auditLog: [
+          {
+            id: `aud-${Date.now()}`,
+            time: stamp,
+            actor: req.stages[pendingIdx].assignee,
+            processTag: 'ENT-REJ',
+            tone: 'rose',
+            action: `Rejected ${req.requestCode} at ${req.stages[pendingIdx].step} (${req.workflowCode})`,
+            target: req.entitlementName,
+          },
+          ...s.auditLog,
+        ],
+      }));
+      return;
+    }
+
+    const approveAll = decision === 'approve-all';
+    const nextStages: OnboardingApprovalStage[] = req.stages.map((st, idx) => {
+      if (approveAll) {
+        return st.status === 'Approved'
+          ? st
+          : { ...st, status: 'Approved', decidedAt: `${today} ${stamp.slice(0, 5)}` };
+      }
+      if (idx === pendingIdx) {
+        return { ...st, status: 'Approved', decidedAt: `${today} ${stamp.slice(0, 5)}` };
+      }
+      if (idx === pendingIdx + 1) {
+        return { ...st, status: 'Pending' };
+      }
+      return st;
+    });
+
+    const allApproved = nextStages.every((st) => st.status === 'Approved');
+
+    if (!allApproved) {
+      const nextPending = nextStages.find((st) => st.status === 'Pending');
+      set((s) => ({
+        entitlementRequests: s.entitlementRequests.map((r) =>
+          r.id === requestId ? { ...r, stages: nextStages } : r
+        ),
+        toastMessage: `Approved ${req.stages[pendingIdx].step} for ${req.requestCode} — routed to ${nextPending?.approverRole ?? 'next stage'}.`,
+        auditLog: [
+          {
+            id: `aud-${Date.now()}`,
+            time: stamp,
+            actor: req.stages[pendingIdx].assignee,
+            processTag: 'ENT-APR',
+            tone: 'sky',
+            action: `Approved ${req.stages[pendingIdx].step} of ${req.requestCode}; awaiting ${nextPending?.approverRole}`,
+            target: req.entitlementName,
+          },
+          ...s.auditLog,
+        ],
+      }));
+      return;
+    }
+
+    // Final stage approved -> CREATE live DemoEntitlement in Entitlements catalog!
+    const newEntId = `ent-onb-${Date.now()}`;
+    const createdEntitlement: DemoEntitlement = {
+      id: newEntId,
+      name: req.entitlementName,
+      application: req.application,
+      assignedTo: `Catalog Ready · Owner: ${req.owner}`,
+      source: 'Business Role',
+      sensitivity: req.sensitivity,
+      status: 'Reconciled',
+    };
+
+    const { smtp, emailTemplate } = get().platformConfig;
+    const msgCode = `EML-${7049 + get().emailNotifications.length}`;
+    const ownerEmail = `${req.owner.toLowerCase().replace(/\s+/g, '.')}@identra-corp.io`;
+    const tplData: BrandedEmailTemplateInput = {
+      badgeText: 'ENTITLEMENT PUBLISHED',
+      badgeTone: 'emerald',
+      headline: `Entitlement Onboarded to Catalog: ${req.entitlementName}`,
+      greeting: `Hi ${req.owner},`,
+      intro: `All approval stages under ${req.workflowName} (${req.workflowCode}) have passed. "${req.entitlementName}" is now live and governed in the IDENTRA Entitlements Catalog.`,
+      metadataRows: [
+        { label: 'Request Code', value: req.requestCode, mono: true },
+        { label: 'Entitlement', value: req.entitlementName, mono: true },
+        { label: 'Technical ID', value: req.technicalId, mono: true },
+        { label: 'Target System', value: req.application },
+        { label: 'Sensitivity & Review', value: `${req.sensitivity} · Every ${req.recertificationDays} days`, mono: true },
+        { label: 'Self-Service Catalog', value: req.requestableInCatalog ? 'Enabled' : 'Restricted (Role-Only)' },
+      ],
+      ctaLabel: 'View Entitlements Catalog',
+      ctaUrl: 'https://identra-two.vercel.app/#demo',
+      messageCode: msgCode,
+      timestamp: `${today} ${stamp}`,
+    };
+
+    const notifEmail: DemoEmailNotification = {
+      id: `eml-ent-ok-${Date.now()}`,
+      messageCode: msgCode,
+      timestamp: `${today} ${stamp}`,
+      status: 'Delivered',
+      trigger: `Entitlement Approved & Published · ${req.requestCode} (${req.workflowCode})`,
+      triggerCategory: 'Access Review',
+      recipientName: req.owner,
+      recipientEmail: ownerEmail,
+      recipientRole: 'Entitlement Owner',
+      from: `${smtp.fromName} <${smtp.fromEmail}>`,
+      subject: `Entitlement Onboarded: ${req.entitlementName} (${req.application})`,
+      smtpProvider: `${smtp.host}:${smtp.port} · ${smtp.encryption}`,
+      deliveryLatencyMs: 174,
+      templateData: tplData,
+      htmlBody: buildBrandedIdentraEmailHtml(tplData, emailTemplate),
+    };
+
+    set((s) => ({
+      entitlementRequests: s.entitlementRequests.map((r) =>
+        r.id === requestId
+          ? {
+              ...r,
+              stages: nextStages,
+              status: 'Approved & Created',
+              createdEntitlementId: newEntId,
+            }
+          : r
+      ),
+      entitlements: [createdEntitlement, ...s.entitlements],
+      applications: s.applications.map((app) =>
+        app.name === req.application
+          ? { ...app, entitlements: app.entitlements + 1 }
+          : app
+      ),
+      emailNotifications: [notifEmail, ...s.emailNotifications],
+      toastMessage: `Approved ${req.requestCode} — published "${req.entitlementName}" to Entitlements Catalog (Owner: ${req.owner}).`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'Entitlement Onboarding',
+          processTag: 'ENT-NEW',
+          tone: 'emerald',
+          action: `Completed ${req.workflowCode} approval & published entitlement (${req.sensitivity}, ${req.recertificationDays}d SLA)`,
+          target: req.entitlementName,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
 
   runRoleMiningDiscovery: () => {
     const candidates = get().minedRoles.filter((m) => m.status === 'Recommended').length;
@@ -2078,6 +2727,8 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
       reviews: INITIAL_DEMO_REVIEWS,
       policies: INITIAL_DEMO_POLICIES,
       governanceControls: INITIAL_GOVERNANCE_CONTROLS,
+      contractorRequests: INITIAL_CONTRACTOR_REQUESTS,
+      entitlementRequests: INITIAL_ENTITLEMENT_REQUESTS,
       provisioningJobs: INITIAL_PROVISIONING_JOBS,
       importRuns: INITIAL_IMPORT_RUNS,
       emailNotifications: INITIAL_EMAIL_NOTIFICATIONS,

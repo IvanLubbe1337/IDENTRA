@@ -128,6 +128,7 @@ export function EntitlementsView() {
   const entitlements = useDemoStore((s) => s.entitlements);
   const searchQuery = useDemoStore((s) => s.searchQuery);
   const revokeEntitlementDrift = useDemoStore((s) => s.revokeEntitlementDrift);
+  const openOnboardingTab = useDemoStore((s) => s.openOnboardingTab);
 
   const filtered = entitlements.filter(
     (e) =>
@@ -139,13 +140,23 @@ export function EntitlementsView() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="font-display text-2xl font-extrabold text-[#0F172A]">
-          Entitlements Catalog (12,480)
-        </h1>
-        <p className="text-sm text-slate-500">
-          Continuous Desired-vs-Actual comparison isolating direct out-of-band privilege drift.
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="font-display text-2xl font-extrabold text-[#0F172A]">
+            Entitlements Catalog ({(12474 + entitlements.length).toLocaleString()})
+          </h1>
+          <p className="text-sm text-slate-500">
+            Continuous Desired-vs-Actual comparison isolating direct out-of-band privilege drift.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => openOnboardingTab('entitlement')}
+          className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-[#0EA5E9] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#0284C7]"
+        >
+          <KeyRound className="h-3.5 w-3.5" />
+          <span>Onboard Entitlement</span>
+        </button>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">

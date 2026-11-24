@@ -13,6 +13,7 @@ export type DemoSectionId =
   | 'compliance'
   | 'reporting'
   | 'lifecycle'
+  | 'onboarding'
   | 'workflows'
   | 'provisioning-engine'
   | 'imports'
@@ -4187,5 +4188,255 @@ export const INITIAL_ROLE_OPTIMISATIONS: DemoRoleOptimisationItem[] = [
     recommendation:
       'Consolidate shared AWS/GitHub baseline into "Engineering – Cloud Platform SRE" and keep Prod K8s strictly JIT.',
     status: 'Open',
+  },
+];
+
+/* -------------------------------------------------------------------------- */
+/* Contractor Onboarding & Entitlement Onboarding Processes                   */
+/* -------------------------------------------------------------------------- */
+
+export interface OnboardingApprovalStage {
+  step: string;
+  approverRole: string;
+  assignee: string;
+  status: 'Approved' | 'Pending' | 'Queued' | 'Rejected';
+  decidedAt?: string;
+}
+
+export interface OnboardingWorkflowOption {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  tierRequirement?: 'Any' | 'Elevated / Critical';
+  stages: { approverRole: string; assignee: string }[];
+}
+
+export const CONTRACTOR_ONBOARDING_WORKFLOWS: OnboardingWorkflowOption[] = [
+  {
+    id: 'wf-ctr-sponsor',
+    code: 'WF-CTR-01',
+    name: 'Sponsor Approval Only',
+    description: 'Single-stage sign-off by the accountable internal sponsor (for standard ≤90d engagements).',
+    tierRequirement: 'Any',
+    stages: [{ approverRole: 'Internal Sponsor Approval', assignee: 'Selected Sponsor' }],
+  },
+  {
+    id: 'wf-ctr-sponsor-iam',
+    code: 'WF-CTR-02',
+    name: 'Sponsor → IAM & Security Governance',
+    description: 'Two-stage workflow combining sponsor verification with IAM least-privilege review.',
+    tierRequirement: 'Any',
+    stages: [
+      { approverRole: 'Internal Sponsor Approval', assignee: 'Selected Sponsor' },
+      { approverRole: 'IAM & Security Governance', assignee: 'Platform Security' },
+    ],
+  },
+  {
+    id: 'wf-ctr-tier0',
+    code: 'WF-CTR-03',
+    name: 'Sponsor → Vendor Procurement → InfoSec (Tier-0)',
+    description: 'Three-stage high-assurance approval required for >90d or privileged vendor engagements.',
+    tierRequirement: 'Elevated / Critical',
+    stages: [
+      { approverRole: 'Internal Sponsor Approval', assignee: 'Selected Sponsor' },
+      { approverRole: 'Vendor Procurement Check', assignee: 'Third-Party Risk Office' },
+      { approverRole: 'InfoSec Tier-0 Sign-Off', assignee: 'CISO Assurance Desk' },
+    ],
+  },
+  {
+    id: 'wf-ctr-dept-iam',
+    code: 'WF-CTR-04',
+    name: 'Department Head → IAM Operations',
+    description: 'Executive department approval followed by automated B2B federation readiness check.',
+    tierRequirement: 'Any',
+    stages: [
+      { approverRole: 'Department Head Approval', assignee: 'Department Executive' },
+      { approverRole: 'IAM Operations Verification', assignee: 'Identity Operations' },
+    ],
+  },
+];
+
+export const ENTITLEMENT_ONBOARDING_WORKFLOWS: OnboardingWorkflowOption[] = [
+  {
+    id: 'wf-ent-app',
+    code: 'WF-ENT-01',
+    name: 'Application Owner Approval',
+    description: 'Single-stage sign-off by the connected system owner (Standard sensitivity only).',
+    tierRequirement: 'Any',
+    stages: [{ approverRole: 'Application Owner Approval', assignee: 'Application Owner' }],
+  },
+  {
+    id: 'wf-ent-owner-app',
+    code: 'WF-ENT-02',
+    name: 'Entitlement Owner → Application Owner',
+    description: 'Two-stage validation confirming both business ownership and target system schema.',
+    tierRequirement: 'Any',
+    stages: [
+      { approverRole: 'Entitlement Owner Sign-Off', assignee: 'Selected Owner' },
+      { approverRole: 'Application Owner Approval', assignee: 'Target App Owner' },
+    ],
+  },
+  {
+    id: 'wf-ent-sec-sod',
+    code: 'WF-ENT-03',
+    name: 'App Owner → Security & SoD Governance',
+    description: 'Required for High/Critical privileges to validate SoD conflict matrices before onboarding.',
+    tierRequirement: 'Elevated / Critical',
+    stages: [
+      { approverRole: 'Application Owner Approval', assignee: 'Target App Owner' },
+      { approverRole: 'Security & SoD Risk Review', assignee: 'Governance Assurance Team' },
+    ],
+  },
+  {
+    id: 'wf-ent-sox',
+    code: 'WF-ENT-04',
+    name: 'App Owner → SOX Control Owner → IAM Architecture',
+    description: 'Three-stage regulated financial/Tier-0 workflow sealing full SOX 404 evidence.',
+    tierRequirement: 'Elevated / Critical',
+    stages: [
+      { approverRole: 'Application Owner Approval', assignee: 'Target App Owner' },
+      { approverRole: 'SOX Control Owner Approval', assignee: 'David Chen (Controller Office)' },
+      { approverRole: 'IAM Architecture Board', assignee: 'Principal IAM Architect' },
+    ],
+  },
+];
+
+export interface DemoContractorOnboardingRequest {
+  id: string;
+  requestCode: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  vendorCompany: string;
+  title: string;
+  department: string;
+  departmentRefId: string;
+  costCenterCode: string;
+  location: string;
+  sponsorName: string;
+  sponsorRefId: string;
+  startDate: string;
+  endDate: string;
+  durationDays: number;
+  ndaVerified: boolean;
+  justification: string;
+  workflowId: string;
+  workflowCode: string;
+  workflowName: string;
+  stages: OnboardingApprovalStage[];
+  status: 'Pending Approval' | 'Approved & Created' | 'Rejected';
+  submittedAt: string;
+  createdPersonId?: string;
+}
+
+export interface DemoEntitlementOnboardingRequest {
+  id: string;
+  requestCode: string;
+  entitlementName: string;
+  technicalId: string;
+  application: string;
+  entitlementType:
+    | 'AD Security Group'
+    | 'SAP Role'
+    | 'AWS Permission Set'
+    | 'Snowflake Privilege'
+    | 'Entra ID License'
+    | 'App Permission';
+  owner: string;
+  sensitivity: 'Standard' | 'High' | 'Critical';
+  recertificationDays: 90 | 180 | 365;
+  requestableInCatalog: boolean;
+  sodChecked: boolean;
+  sodConflictNote?: string;
+  description: string;
+  workflowId: string;
+  workflowCode: string;
+  workflowName: string;
+  stages: OnboardingApprovalStage[];
+  status: 'Pending Approval' | 'Approved & Created' | 'Rejected';
+  submittedAt: string;
+  createdEntitlementId?: string;
+}
+
+export const INITIAL_CONTRACTOR_REQUESTS: DemoContractorOnboardingRequest[] = [
+  {
+    id: 'ctr-req-1',
+    requestCode: 'CTR-REQ-401',
+    firstName: 'Thandi',
+    lastName: 'Khumalo',
+    email: 'thandi.khumalo@vanguard-ext.co.za',
+    vendorCompany: 'Vanguard External Assurance LLP',
+    title: 'Cloud Compliance Specialist',
+    department: 'External Assurance & Contractors',
+    departmentRefId: 'dept-contractor',
+    costCenterCode: 'CC-9001-EXT',
+    location: 'Johannesburg (Hybrid / B2B)',
+    sponsorName: 'Priya Nair',
+    sponsorRefId: 'mgr-priya',
+    startDate: '2026-11-25',
+    endDate: '2027-02-23',
+    durationDays: 90,
+    ndaVerified: true,
+    justification: 'Q1 ISO 27001 cloud control evidence audit across AWS non-prod and Snowflake reporting.',
+    workflowId: 'wf-ctr-sponsor-iam',
+    workflowCode: 'WF-CTR-02',
+    workflowName: 'Sponsor → IAM & Security Governance',
+    stages: [
+      {
+        step: 'Stage 1',
+        approverRole: 'Internal Sponsor Approval',
+        assignee: 'Priya Nair',
+        status: 'Approved',
+        decidedAt: '2026-11-24 09:12',
+      },
+      {
+        step: 'Stage 2',
+        approverRole: 'IAM & Security Governance',
+        assignee: 'Platform Security',
+        status: 'Pending',
+      },
+    ],
+    status: 'Pending Approval',
+    submittedAt: '2026-11-24 08:50',
+  },
+];
+
+export const INITIAL_ENTITLEMENT_REQUESTS: DemoEntitlementOnboardingRequest[] = [
+  {
+    id: 'ent-req-1',
+    requestCode: 'ENT-REQ-809',
+    entitlementName: 'SAP:FI_STATUTORY_AUDIT_RO',
+    technicalId: 'SAP_ROLE: Z_FI_STATUTORY_AUDIT_READONLY',
+    application: 'SAP S/4HANA Finance',
+    entitlementType: 'SAP Role',
+    owner: 'Claire Vance',
+    sensitivity: 'High',
+    recertificationDays: 90,
+    requestableInCatalog: true,
+    sodChecked: true,
+    sodConflictNote: 'Read-only scope verified — 0 SOX-SOD-402 conflicts.',
+    description:
+      'Read-only statutory general ledger audit role for external auditors and Finance Operations reviewers in Johannesburg and London.',
+    workflowId: 'wf-ent-sec-sod',
+    workflowCode: 'WF-ENT-03',
+    workflowName: 'App Owner → Security & SoD Governance',
+    stages: [
+      {
+        step: 'Stage 1',
+        approverRole: 'Application Owner Approval',
+        assignee: 'ERP Governance Team',
+        status: 'Approved',
+        decidedAt: '2026-11-24 09:40',
+      },
+      {
+        step: 'Stage 2',
+        approverRole: 'Security & SoD Risk Review',
+        assignee: 'Governance Assurance Team',
+        status: 'Pending',
+      },
+    ],
+    status: 'Pending Approval',
+    submittedAt: '2026-11-24 09:15',
   },
 ];

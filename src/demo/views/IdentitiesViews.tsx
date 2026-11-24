@@ -30,6 +30,7 @@ export function PeopleView() {
   const selectedPersonId = useDemoStore((s) => s.selectedPersonId);
   const setSelectedPersonId = useDemoStore((s) => s.setSelectedPersonId);
   const onboardNewJoiner = useDemoStore((s) => s.onboardNewJoiner);
+  const openOnboardingTab = useDemoStore((s) => s.openOnboardingTab);
   const emergencyDeactivatePerson = useDemoStore((s) => s.emergencyDeactivatePerson);
 
   const [statusFilter, setStatusFilter] = useState<string>('All');
@@ -65,14 +66,24 @@ export function PeopleView() {
             Inspect any identity for complete HR master data, UPN, contract dates, clickable Org Units &amp; Contexts, source lineage, change history, or trigger emergency deactivation.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onboardNewJoiner}
-          className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-[#0EA5E9] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#0284C7]"
-        >
-          <UserPlus className="h-3.5 w-3.5" />
-          <span>Simulate HRIS Joiner</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => openOnboardingTab('contractor')}
+            className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:border-[#0EA5E9] hover:text-[#0284C7]"
+          >
+            <UserPlus className="h-3.5 w-3.5 text-[#0EA5E9]" />
+            <span>Onboard Contractor</span>
+          </button>
+          <button
+            type="button"
+            onClick={onboardNewJoiner}
+            className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-[#0EA5E9] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#0284C7]"
+          >
+            <UserPlus className="h-3.5 w-3.5" />
+            <span>Simulate HRIS Joiner</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter pills */}
