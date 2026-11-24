@@ -1051,6 +1051,7 @@ export function ReportingView() {
                   'Context Change',
                   'Role / SoD',
                   'Provisioning',
+                  'Emergency Deactivation',
                 ] as const
               ).map((cat) => (
                 <button

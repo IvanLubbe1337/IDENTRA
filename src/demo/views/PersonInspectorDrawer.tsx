@@ -14,6 +14,7 @@ import {
   MapPin,
   Network,
   Shield,
+  ShieldOff,
   UserCheck,
   UserMinus,
   Wallet,
@@ -36,6 +37,7 @@ interface PersonInspectorDrawerProps {
 export function PersonInspectorDrawer({ person, onClose }: PersonInspectorDrawerProps) {
   const movePersonDepartment = useDemoStore((s) => s.movePersonDepartment);
   const offboardPerson = useDemoStore((s) => s.offboardPerson);
+  const emergencyDeactivatePerson = useDemoStore((s) => s.emergencyDeactivatePerson);
   const mitigatePersonSod = useDemoStore((s) => s.mitigatePersonSod);
 
   const [activeTab, setActiveTab] = useState<'overview' | 'contexts' | 'access' | 'history'>(
@@ -43,10 +45,15 @@ export function PersonInspectorDrawer({ person, onClose }: PersonInspectorDrawer
   );
   // Stack of clicked ReferenceObject IDs enabling recursive drill-down & breadcrumb back-navigation
   const [refStack, setRefStack] = useState<string[]>([]);
+  const [showEmergencyBar, setShowEmergencyBar] = useState(false);
+  const [emergencyReason, setEmergencyReason] = useState(
+    'Suspected credential compromise / immediate containment'
+  );
 
   useEffect(() => {
     setActiveTab('overview');
     setRefStack([]);
+    setShowEmergencyBar(false);
   }, [person?.id]);
 
   const activeRefId = refStack.length > 0 ? refStack[refStack.length - 1] : null;
@@ -97,15 +104,17 @@ export function PersonInspectorDrawer({ person, onClose }: PersonInspectorDrawer
                     <span
                       className={cn(
                         'rounded-full px-2 py-0.5',
-                        person.jmlStatus === 'Joiner'
-                          ? 'bg-emerald-50 text-emerald-700'
-                          : person.jmlStatus === 'Mover'
-                            ? 'bg-sky-50 text-[#0284C7]'
-                            : person.jmlStatus === 'Leaver'
-                              ? 'bg-rose-50 text-rose-600'
-                              : person.jmlStatus === 'Suspended'
-                                ? 'bg-slate-100 text-slate-600'
-                                : 'bg-emerald-50 text-emerald-700'
+                        person.jmlStatus === 'Deactivated'
+                          ? 'bg-rose-100 text-rose-800 ring-1 ring-rose-300'
+                          : person.jmlStatus === 'Joiner'
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : person.jmlStatus === 'Mover'
+                              ? 'bg-sky-50 text-[#0284C7]'
+                              : person.jmlStatus === 'Leaver'
+                                ? 'bg-rose-50 text-rose-600'
+                                : person.jmlStatus === 'Suspended'
+                                  ? 'bg-slate-100 text-slate-600'
+                                  : 'bg-emerald-50 text-emerald-700'
                       )}
                     >
                       {person.jmlStatus}
@@ -121,6 +130,17 @@ export function PersonInspectorDrawer({ person, onClose }: PersonInspectorDrawer
                 </div>
 
                 <div className="flex shrink-0 items-center gap-2">
+                  {person.jmlStatus !== 'Deactivated' && (
+                    <button
+                      type="button"
+                      onClick={() => setShowEmergencyBar((v) => !v)}
+                      className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 transition-all hover:bg-rose-600 hover:text-white"
+                    >
+                      <ShieldOff className="h-3.5 w-3.5" />
+                      <span>Emergency Deactivate</span>
+                    </button>
+                  )}
+
                   {/* Prominent History Button right in the Inspector Header */}
                   <button
                     type="button"
@@ -147,6 +167,49 @@ export function PersonInspectorDrawer({ person, onClose }: PersonInspectorDrawer
                   </Dialog.Close>
                 </div>
               </div>
+
+              {/* Inline Emergency Kill-Switch Confirmation Panel */}
+              {showEmergencyBar && person.jmlStatus !== 'Deactivated' && (
+                <div className="border-b border-rose-200 bg-rose-50/90 px-6 py-4 text-xs">
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
+                    <div className="flex-1 space-y-2">
+                      <div className="font-bold text-rose-900">
+                        Emergency Deactivation: Disable all {person.applications.length} target system accounts &amp; set status to Deactivated
+                      </div>
+                      <input
+                        type="text"
+                        value={emergencyReason}
+                        onChange={(e) => setEmergencyReason(e.target.value)}
+                        placeholder="Incident reason recorded in immutable History..."
+                        className="w-full rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-xs text-[#0F172A] focus:border-rose-400 focus:outline-none"
+                      />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            emergencyDeactivatePerson(person.id, emergencyReason);
+                            setShowEmergencyBar(false);
+                            setRefStack([]);
+                            setActiveTab('history');
+                          }}
+                          className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-rose-600 px-3.5 py-1.5 font-semibold text-white hover:bg-rose-700"
+                        >
+                          <ShieldOff className="h-3.5 w-3.5" />
+                          <span>Confirm &amp; Disable All Target Accounts</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowEmergencyBar(false)}
+                          className="cursor-pointer rounded-lg border border-rose-200 bg-white px-3 py-1.5 font-semibold text-slate-600 hover:bg-slate-50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Either Recursive Reference Object Drill-Down View OR Main Tabbed Identity View */}
               {activeRef ? (
@@ -683,11 +746,27 @@ export function PersonInspectorDrawer({ person, onClose }: PersonInspectorDrawer
                         <button
                           type="button"
                           onClick={() => offboardPerson(person.id)}
-                          disabled={person.jmlStatus === 'Suspended'}
-                          className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                          disabled={
+                            person.jmlStatus === 'Suspended' ||
+                            person.jmlStatus === 'Deactivated'
+                          }
+                          className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50"
                         >
                           <UserMinus className="h-3.5 w-3.5" />
                           <span>Trigger Immediate Off-board</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowEmergencyBar(true)}
+                          disabled={person.jmlStatus === 'Deactivated'}
+                          className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+                        >
+                          <ShieldOff className="h-3.5 w-3.5" />
+                          <span>
+                            {person.jmlStatus === 'Deactivated'
+                              ? 'Identity Deactivated'
+                              : 'Emergency Deactivate'}
+                          </span>
                         </button>
                       </div>
                     </div>

@@ -22,6 +22,7 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
+  Settings,
   Shield,
   ShieldAlert,
   Users,
@@ -53,6 +54,7 @@ import {
 import { ProvisioningEngineView } from '@/demo/views/ProvisioningEngineView';
 import { ImportsView } from '@/demo/views/ImportsView';
 import { EmailNotificationsView } from '@/demo/views/EmailNotificationsView';
+import { ConfigurationView } from '@/demo/views/ConfigurationView';
 import { cn } from '@/lib/cn';
 
 interface NavGroup {
@@ -108,6 +110,12 @@ const SIDEBAR_NAV: NavGroup[] = [
       { id: 'imports', label: 'Imports', icon: DownloadCloud },
       { id: 'email-notifications', label: 'Email Notifications', icon: Mail },
       { id: 'audit-log', label: 'Audit log', icon: BookOpen },
+    ],
+  },
+  {
+    group: 'CONFIGURATION',
+    items: [
+      { id: 'configuration', label: 'Configuration', icon: Settings },
     ],
   },
 ];
@@ -222,6 +230,8 @@ export function DemoLayout() {
         return <EmailNotificationsView />;
       case 'audit-log':
         return <AuditLogView />;
+      case 'configuration':
+        return <ConfigurationView />;
     }
   };
 

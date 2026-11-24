@@ -15,7 +15,8 @@ export type DemoSectionId =
   | 'provisioning-engine'
   | 'imports'
   | 'email-notifications'
-  | 'audit-log';
+  | 'audit-log'
+  | 'configuration';
 
 export type ImportStatus = 'Completed' | 'Failed' | 'Completed with Warnings';
 
@@ -90,7 +91,13 @@ export interface IdentityHistoryEntry {
   id: string;
   timestamp: string;
   source: string;
-  category: 'HRIS Sync' | 'JML Lifecycle' | 'Role / SoD' | 'Context Change' | 'Provisioning';
+  category:
+    | 'HRIS Sync'
+    | 'JML Lifecycle'
+    | 'Role / SoD'
+    | 'Context Change'
+    | 'Provisioning'
+    | 'Emergency Deactivation';
   summary: string;
   changes: IdentityHistoryChange[];
 }
@@ -122,7 +129,7 @@ export interface DemoPerson {
   sourceRefId: string;
   sourceExternalId: string;
   lastHrSync: string;
-  jmlStatus: 'Active' | 'Joiner' | 'Mover' | 'Leaver' | 'Suspended';
+  jmlStatus: 'Active' | 'Joiner' | 'Mover' | 'Leaver' | 'Suspended' | 'Deactivated';
   riskScore: number;
   roles: string[];
   applications: string[];
@@ -2685,24 +2692,176 @@ export type EmailTriggerCategory =
   | 'Birthright'
   | 'Operations';
 
-export interface DemoEmailNotification {
-  id: string;
-  messageCode: string;
-  timestamp: string;
-  status: EmailDeliveryStatus;
-  trigger: string;
-  triggerCategory: EmailTriggerCategory;
-  recipientName: string;
-  recipientEmail: string;
-  recipientRole: string;
-  cc?: string[];
-  from: string;
-  subject: string;
-  smtpProvider: string;
-  deliveryLatencyMs: number | null;
-  errorMessage?: string;
-  htmlBody: string;
+export type SmtpAuthMethod =
+  | 'OAuth 2.0 / Graph Client Credentials'
+  | 'SMTP AUTH (Username & Password)'
+  | 'API Key Bearer'
+  | 'mTLS Client Certificate';
+
+export interface SmtpConfig {
+  host: string;
+  port: number;
+  encryption: 'STARTTLS (TLS 1.3)' | 'SSL/TLS (465)' | 'Opportunistic TLS';
+  authMethod: SmtpAuthMethod;
+  username: string;
+  password: string;
+  fromName: string;
+  fromEmail: string;
+  replyToEmail: string;
+  lastTestedAt: string;
+  connectionStatus: 'Connected' | 'Untested' | 'Error';
 }
+
+export interface MasterEmailTemplateConfig {
+  brandTitle: string;
+  brandSubtitle: string;
+  headerBgStart: string;
+  headerBgEnd: string;
+  headerTextColor: string;
+  accentColor: string;
+  canvasBgColor: string;
+  cardBgColor: string;
+  fontFamily: 'Inter' | 'Plus Jakarta Sans' | 'Georgia Serif' | 'System UI';
+  cardRadiusPx: 8 | 14 | 18 | 24;
+  buttonRadiusPx: 4 | 10 | 999;
+  showBrandEmblem: boolean;
+  showCorrelationBadge: boolean;
+  showDkimFooter: boolean;
+  footerBrandText: string;
+  footerDisclaimer: string;
+}
+
+export interface PlatformConfig {
+  smtp: SmtpConfig;
+  emailTemplate: MasterEmailTemplateConfig;
+  provisioning: {
+    defaultMode: 'Auto-Provision' | 'Simulation Mode';
+    importDeltaIntervalMins: 5 | 15 | 30 | 60;
+    orphanThresholdDays: 30 | 60 | 90;
+    rollbackImportOnError: boolean;
+    emergencyDisableAllTargets: boolean;
+  };
+  governance: {
+    defaultReviewWorkflow: ReviewWorkflowType;
+    reviewEscalationSlaDays: 5 | 7 | 10 | 14;
+    autoRevokeBirthrightsOnExit: boolean;
+    sodEnforcementMode: 'Preventative Block & Alert' | 'Detective Monitor Only';
+    nhiMaxSecretTtlDays: 30 | 60 | 90;
+    currencySymbol: 'R' | '€' | '£';
+  };
+}
+
+export const MASTER_EMAIL_PRESETS: {
+  id: string;
+  label: string;
+  config: Partial<MasterEmailTemplateConfig>;
+}[] = [
+  {
+    id: 'identra-obsidian',
+    label: 'IDENTRA Obsidian & Sky',
+    config: {
+      headerBgStart: '#0F172A',
+      headerBgEnd: '#0C4A6E',
+      headerTextColor: '#FFFFFF',
+      accentColor: '#0EA5E9',
+      canvasBgColor: '#F1F5F9',
+      cardBgColor: '#FFFFFF',
+      cardRadiusPx: 18,
+      buttonRadiusPx: 10,
+    },
+  },
+  {
+    id: 'emerald-trust',
+    label: 'Corporate Slate & Emerald',
+    config: {
+      headerBgStart: '#064E3B',
+      headerBgEnd: '#0F172A',
+      headerTextColor: '#FFFFFF',
+      accentColor: '#10B981',
+      canvasBgColor: '#ECFDF5',
+      cardBgColor: '#FFFFFF',
+      cardRadiusPx: 14,
+      buttonRadiusPx: 10,
+    },
+  },
+  {
+    id: 'executive-indigo',
+    label: 'Executive Indigo & Violet',
+    config: {
+      headerBgStart: '#1E1B4B',
+      headerBgEnd: '#312E81',
+      headerTextColor: '#FFFFFF',
+      accentColor: '#6366F1',
+      canvasBgColor: '#EEF2FF',
+      cardBgColor: '#FFFFFF',
+      cardRadiusPx: 18,
+      buttonRadiusPx: 999,
+    },
+  },
+  {
+    id: 'minimal-daylight',
+    label: 'Minimalist Daylight',
+    config: {
+      headerBgStart: '#FFFFFF',
+      headerBgEnd: '#F8FAFC',
+      headerTextColor: '#0F172A',
+      accentColor: '#0284C7',
+      canvasBgColor: '#F8FAFC',
+      cardBgColor: '#FFFFFF',
+      cardRadiusPx: 8,
+      buttonRadiusPx: 4,
+    },
+  },
+];
+
+export const INITIAL_PLATFORM_CONFIG: PlatformConfig = {
+  smtp: {
+    host: 'smtp.office365.com',
+    port: 587,
+    encryption: 'STARTTLS (TLS 1.3)',
+    authMethod: 'OAuth 2.0 / Graph Client Credentials',
+    username: 'svc-identra-mailer@identra-corp.io',
+    password: '••••••••••••••••••••••••',
+    fromName: 'IDENTRA Identity Notifications',
+    fromEmail: 'no-reply@identra-corp.io',
+    replyToEmail: 'iam-ops@identra-corp.io',
+    lastTestedAt: '2026-11-24 09:30:00',
+    connectionStatus: 'Connected',
+  },
+  emailTemplate: {
+    brandTitle: 'IDENTRA',
+    brandSubtitle: 'IGA SUITE · IDENTITY PROCESS++',
+    headerBgStart: '#0F172A',
+    headerBgEnd: '#0C4A6E',
+    headerTextColor: '#FFFFFF',
+    accentColor: '#0EA5E9',
+    canvasBgColor: '#F1F5F9',
+    cardBgColor: '#FFFFFF',
+    fontFamily: 'Inter',
+    cardRadiusPx: 18,
+    buttonRadiusPx: 10,
+    showBrandEmblem: true,
+    showCorrelationBadge: true,
+    showDkimFooter: true,
+    footerBrandText: 'IDENTRA Autonomous IGA · Automated Governance Notification',
+    footerDisclaimer: 'Inherited automatically from the IDENTRA Master Email Template.',
+  },
+  provisioning: {
+    defaultMode: 'Auto-Provision',
+    importDeltaIntervalMins: 15,
+    orphanThresholdDays: 60,
+    rollbackImportOnError: true,
+    emergencyDisableAllTargets: true,
+  },
+  governance: {
+    defaultReviewWorkflow: 'Manager Approval',
+    reviewEscalationSlaDays: 10,
+    autoRevokeBirthrightsOnExit: true,
+    sodEnforcementMode: 'Preventative Block & Alert',
+    nhiMaxSecretTtlDays: 60,
+    currencySymbol: 'R',
+  },
+};
 
 export interface BrandedEmailTemplateInput {
   badgeText: string;
@@ -2720,13 +2879,58 @@ export interface BrandedEmailTemplateInput {
   timestamp: string;
 }
 
-export function buildBrandedIdentraEmailHtml(input: BrandedEmailTemplateInput): string {
+export interface DemoEmailNotification {
+  id: string;
+  messageCode: string;
+  timestamp: string;
+  status: EmailDeliveryStatus;
+  trigger: string;
+  triggerCategory: EmailTriggerCategory;
+  recipientName: string;
+  recipientEmail: string;
+  recipientRole: string;
+  cc?: string[];
+  from: string;
+  subject: string;
+  smtpProvider: string;
+  deliveryLatencyMs: number | null;
+  errorMessage?: string;
+  templateData: BrandedEmailTemplateInput;
+  htmlBody: string;
+}
+
+function resolveEmailFontStack(font: MasterEmailTemplateConfig['fontFamily']): string {
+  switch (font) {
+    case 'Plus Jakarta Sans':
+      return "'Plus Jakarta Sans','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif";
+    case 'Georgia Serif':
+      return "Georgia,'Times New Roman',Times,serif";
+    case 'System UI':
+      return "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+    default:
+      return "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+  }
+}
+
+export function buildBrandedIdentraEmailHtml(
+  input: BrandedEmailTemplateInput,
+  master: MasterEmailTemplateConfig = INITIAL_PLATFORM_CONFIG.emailTemplate
+): string {
   const tonePalette = {
-    sky: { bg: '#E0F2FE', border: '#BAE6FD', text: '#0369A1', accent: '#0EA5E9' },
+    sky: { bg: '#E0F2FE', border: '#BAE6FD', text: '#0369A1', accent: master.accentColor },
     emerald: { bg: '#DCFCE7', border: '#BBF7D0', text: '#047857', accent: '#10B981' },
     amber: { bg: '#FEF3C7', border: '#FDE68A', text: '#B45309', accent: '#F59E0B' },
     rose: { bg: '#FFE4E6', border: '#FECDD3', text: '#BE123C', accent: '#E11D48' },
   }[input.badgeTone];
+
+  const fontStack = resolveEmailFontStack(master.fontFamily);
+  const isLightHeader =
+    master.headerTextColor.toLowerCase() === '#0f172a' ||
+    master.headerBgStart.toLowerCase() === '#ffffff';
+  const subtitleColor = isLightHeader ? master.accentColor : '#7DD3FC';
+  const badgeBg = isLightHeader ? '#F1F5F9' : 'rgba(255,255,255,0.14)';
+  const badgeBorder = isLightHeader ? '#CBD5E1' : 'rgba(255,255,255,0.28)';
+  const badgeColor = isLightHeader ? '#0F172A' : '#FFFFFF';
 
   const rowsHtml = input.metadataRows
     .map(
@@ -2738,7 +2942,7 @@ export function buildBrandedIdentraEmailHtml(input: BrandedEmailTemplateInput): 
                   <td style="padding:10px 14px;border-bottom:1px solid #E2E8F0;font-size:13px;font-weight:600;color:#0F172A;${
                     row.mono
                       ? "font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;"
-                      : "font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;"
+                      : `font-family:${fontStack};`
                   }">
                     ${row.value}
                   </td>
@@ -2759,53 +2963,61 @@ export function buildBrandedIdentraEmailHtml(input: BrandedEmailTemplateInput): 
               </div>`
       : '';
 
+  const emblemHtml = master.showBrandEmblem
+    ? `<td style="vertical-align:middle;padding-right:10px;">
+                            <svg width="28" height="28" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M20 4L6 34H13.2L20 18.8V4Z" fill="${master.accentColor}" />
+                              <path d="M20 4L34 34H26.6L20 18.8V4Z" fill="#2563EB" />
+                              <path d="M14.8 26.2L20 22.8L25.2 26.2L22.5 29.6H17.5L14.8 26.2Z" fill="${master.accentColor}" />
+                            </svg>
+                          </td>`
+    : '';
+
+  const correlationBadgeHtml = master.showCorrelationBadge
+    ? `<td align="right" style="vertical-align:middle;">
+                      <span style="display:inline-block;padding:4px 10px;border-radius:999px;background-color:${badgeBg};border:1px solid ${badgeBorder};color:${badgeColor};font-size:10px;font-weight:700;letter-spacing:0.08em;font-family:'JetBrains Mono',ui-monospace,monospace;">
+                        ${input.messageCode}
+                      </span>
+                    </td>`
+    : '';
+
   return `<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>${input.headline} — IDENTRA IGA Suite</title>
+    <title>${input.headline} — ${master.brandTitle}</title>
   </head>
-  <body style="margin:0;padding:0;background-color:#F1F5F9;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0F172A;">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#F1F5F9;padding:28px 14px;">
+  <body style="margin:0;padding:0;background-color:${master.canvasBgColor};font-family:${fontStack};color:#0F172A;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:${master.canvasBgColor};padding:28px 14px;">
       <tr>
         <td align="center">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background-color:#FFFFFF;border-radius:18px;overflow:hidden;border:1px solid #E2E8F0;box-shadow:0 10px 30px rgba(15,23,42,0.06);">
-            <!-- IDENTRA Brand Header -->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background-color:${master.cardBgColor};border-radius:${master.cardRadiusPx}px;overflow:hidden;border:1px solid #E2E8F0;box-shadow:0 10px 30px rgba(15,23,42,0.06);">
+            <!-- Master Template Brand Header -->
             <tr>
-              <td style="background:linear-gradient(135deg,#0F172A 0%,#1E293B 60%,#0C4A6E 100%);padding:22px 28px;">
+              <td style="background:linear-gradient(135deg,${master.headerBgStart} 0%,${master.headerBgEnd} 100%);padding:22px 28px;${isLightHeader ? 'border-bottom:1px solid #E2E8F0;' : ''}">
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                   <tr>
                     <td style="vertical-align:middle;">
                       <table role="presentation" cellspacing="0" cellpadding="0">
                         <tr>
-                          <td style="vertical-align:middle;padding-right:10px;">
-                            <svg width="28" height="28" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M20 4L6 34H13.2L20 18.8V4Z" fill="#38BDF8" />
-                              <path d="M20 4L34 34H26.6L20 18.8V4Z" fill="#2563EB" />
-                              <path d="M14.8 26.2L20 22.8L25.2 26.2L22.5 29.6H17.5L14.8 26.2Z" fill="#0EA5E9" />
-                            </svg>
-                          </td>
+                          ${emblemHtml}
                           <td style="vertical-align:middle;">
-                            <div style="font-size:15px;font-weight:800;letter-spacing:0.18em;color:#FFFFFF;line-height:1.1;">IDENTRA</div>
-                            <div style="font-size:10px;font-weight:600;letter-spacing:0.12em;color:#7DD3FC;text-transform:uppercase;margin-top:2px;font-family:'JetBrains Mono',ui-monospace,monospace;">IGA SUITE · IDENTITY PROCESS++</div>
+                            <div style="font-size:15px;font-weight:800;letter-spacing:0.18em;color:${master.headerTextColor};line-height:1.1;">${master.brandTitle}</div>
+                            <div style="font-size:10px;font-weight:600;letter-spacing:0.12em;color:${subtitleColor};text-transform:uppercase;margin-top:2px;font-family:'JetBrains Mono',ui-monospace,monospace;">${master.brandSubtitle}</div>
                           </td>
                         </tr>
                       </table>
                     </td>
-                    <td align="right" style="vertical-align:middle;">
-                      <span style="display:inline-block;padding:4px 10px;border-radius:999px;background-color:rgba(14,165,233,0.18);border:1px solid rgba(125,211,252,0.35);color:#E0F2FE;font-size:10px;font-weight:700;letter-spacing:0.08em;font-family:'JetBrains Mono',ui-monospace,monospace;">
-                        ${input.messageCode}
-                      </span>
-                    </td>
+                    ${correlationBadgeHtml}
                   </tr>
                 </table>
               </td>
             </tr>
 
-            <!-- Accent Strip -->
+            <!-- Inherited Accent Strip -->
             <tr>
-              <td style="height:4px;background-color:${tonePalette.accent};font-size:0;line-height:0;">&nbsp;</td>
+              <td style="height:4px;background-color:${master.accentColor};font-size:0;line-height:0;">&nbsp;</td>
             </tr>
 
             <!-- Body Content -->
@@ -2833,10 +3045,10 @@ export function buildBrandedIdentraEmailHtml(input: BrandedEmailTemplateInput): 
 
                 ${calloutHtml}
 
-                <!-- Primary Action CTA -->
+                <!-- Primary Action CTA (Inherits Master Accent & Button Radius) -->
                 <table role="presentation" cellspacing="0" cellpadding="0" style="margin-top:24px;">
                   <tr>
-                    <td style="border-radius:10px;background-color:#0EA5E9;">
+                    <td style="border-radius:${master.buttonRadiusPx}px;background-color:${master.accentColor};">
                       <a href="${input.ctaUrl}" style="display:inline-block;padding:12px 22px;font-size:13px;font-weight:700;color:#FFFFFF;text-decoration:none;letter-spacing:0.01em;">
                         ${input.ctaLabel} &rarr;
                       </a>
@@ -2852,18 +3064,27 @@ export function buildBrandedIdentraEmailHtml(input: BrandedEmailTemplateInput): 
               </td>
             </tr>
 
-            <!-- Governance Audit Footer -->
+            <!-- Inherited Master Governance Footer -->
             <tr>
               <td style="background-color:#F8FAFC;border-top:1px solid #E2E8F0;padding:18px 28px;">
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                   <tr>
                     <td style="font-size:11px;line-height:1.5;color:#64748B;">
-                      <strong style="color:#0F172A;">IDENTRA Autonomous IGA</strong> · Automated Governance Notification<br />
-                      Dispatched ${input.timestamp} UTC · Correlation ID <span style="font-family:'JetBrains Mono',ui-monospace,monospace;color:#0284C7;">${input.messageCode}</span>
+                      <strong style="color:#0F172A;">${master.footerBrandText}</strong><br />
+                      Dispatched ${input.timestamp} UTC · Correlation ID <span style="font-family:'JetBrains Mono',ui-monospace,monospace;color:${master.accentColor};">${input.messageCode}</span>
+                      ${
+                        master.footerDisclaimer
+                          ? `<br /><span style="font-size:10px;color:#94A3B8;">${master.footerDisclaimer}</span>`
+                          : ''
+                      }
                     </td>
-                    <td align="right" style="font-size:10px;color:#94A3B8;font-family:'JetBrains Mono',ui-monospace,monospace;">
+                    ${
+                      master.showDkimFooter
+                        ? `<td align="right" style="font-size:10px;color:#94A3B8;font-family:'JetBrains Mono',ui-monospace,monospace;vertical-align:top;">
                       TLS 1.3 · DKIM Signed
-                    </td>
+                    </td>`
+                        : ''
+                    }
                   </tr>
                 </table>
               </td>
@@ -2876,23 +3097,37 @@ export function buildBrandedIdentraEmailHtml(input: BrandedEmailTemplateInput): 
 </html>`;
 }
 
+function makeEmailNotification(
+  meta: Omit<DemoEmailNotification, 'templateData' | 'htmlBody'>,
+  templateData: BrandedEmailTemplateInput,
+  master: MasterEmailTemplateConfig = INITIAL_PLATFORM_CONFIG.emailTemplate
+): DemoEmailNotification {
+  return {
+    ...meta,
+    templateData,
+    htmlBody: buildBrandedIdentraEmailHtml(templateData, master),
+  };
+}
+
 export const INITIAL_EMAIL_NOTIFICATIONS: DemoEmailNotification[] = [
-  {
-    id: 'eml-7048',
-    messageCode: 'EML-7048',
-    timestamp: '2026-11-24 10:24:19',
-    status: 'Delivered',
-    trigger: 'Day-1 HRIS Joiner Onboarding · Birthright BR-002',
-    triggerCategory: 'JML Lifecycle',
-    recipientName: 'Sarah Mitchell',
-    recipientEmail: 'sarah.mitchell@identra-corp.io',
-    recipientRole: 'New Joiner (Financial Analyst)',
-    cc: ['claire.vance@identra-corp.io'],
-    from: 'IDENTRA Identity Notifications <no-reply@identra-corp.io>',
-    subject: 'Welcome to IDENTRA — Your Day-1 Accounts & Finance Access Are Ready',
-    smtpProvider: 'Microsoft 365 Graph Mail · TLS 1.3',
-    deliveryLatencyMs: 284,
-    htmlBody: buildBrandedIdentraEmailHtml({
+  makeEmailNotification(
+    {
+      id: 'eml-7048',
+      messageCode: 'EML-7048',
+      timestamp: '2026-11-24 10:24:19',
+      status: 'Delivered',
+      trigger: 'Day-1 HRIS Joiner Onboarding · Birthright BR-002',
+      triggerCategory: 'JML Lifecycle',
+      recipientName: 'Sarah Mitchell',
+      recipientEmail: 'sarah.mitchell@identra-corp.io',
+      recipientRole: 'New Joiner (Financial Analyst)',
+      cc: ['claire.vance@identra-corp.io'],
+      from: 'IDENTRA Identity Notifications <no-reply@identra-corp.io>',
+      subject: 'Welcome to IDENTRA — Your Day-1 Accounts & Finance Access Are Ready',
+      smtpProvider: 'smtp.office365.com:587 · STARTTLS (TLS 1.3)',
+      deliveryLatencyMs: 284,
+    },
+    {
       badgeText: 'DAY-1 JOINER PROVISIONED',
       badgeTone: 'emerald',
       headline: 'Your Day-1 Identity & Finance Access Are Ready',
@@ -2916,23 +3151,25 @@ export const INITIAL_EMAIL_NOTIFICATIONS: DemoEmailNotification[] = [
         'Need additional application access? Submit a self-service request in the IDENTRA Access Portal — Preventative SoD checks run automatically.',
       messageCode: 'EML-7048',
       timestamp: '2026-11-24 10:24:19',
-    }),
-  },
-  {
-    id: 'eml-7047',
-    messageCode: 'EML-7047',
-    timestamp: '2026-11-24 09:47:12',
-    status: 'Delivered',
-    trigger: 'Access Review Triggered · Manager Approval (WF-REV-MGR-01)',
-    triggerCategory: 'Access Review',
-    recipientName: 'Marcus Bell',
-    recipientEmail: 'marcus.bell@identra-corp.io',
-    recipientRole: 'Line Manager (VP Enterprise Sales)',
-    from: 'IDENTRA Identity Notifications <no-reply@identra-corp.io>',
-    subject: 'Action Required: Certify M365 E5 License & Privileged Access for Your Team',
-    smtpProvider: 'Microsoft 365 Graph Mail · TLS 1.3',
-    deliveryLatencyMs: 318,
-    htmlBody: buildBrandedIdentraEmailHtml({
+    }
+  ),
+  makeEmailNotification(
+    {
+      id: 'eml-7047',
+      messageCode: 'EML-7047',
+      timestamp: '2026-11-24 09:47:12',
+      status: 'Delivered',
+      trigger: 'Access Review Triggered · Manager Approval (WF-REV-MGR-01)',
+      triggerCategory: 'Access Review',
+      recipientName: 'Marcus Bell',
+      recipientEmail: 'marcus.bell@identra-corp.io',
+      recipientRole: 'Line Manager (VP Enterprise Sales)',
+      from: 'IDENTRA Identity Notifications <no-reply@identra-corp.io>',
+      subject: 'Action Required: Certify M365 E5 License & Privileged Access for Your Team',
+      smtpProvider: 'smtp.office365.com:587 · STARTTLS (TLS 1.3)',
+      deliveryLatencyMs: 318,
+    },
+    {
       badgeText: 'ACCESS REVIEW · MANAGER APPROVAL',
       badgeTone: 'sky',
       headline: 'Quarterly Access & License Review Assigned to You',
@@ -2956,24 +3193,26 @@ export const INITIAL_EMAIL_NOTIFICATIONS: DemoEmailNotification[] = [
         'All certification decisions are cryptographically sealed into the IDENTRA SOX/ISO 27001 audit trail.',
       messageCode: 'EML-7047',
       timestamp: '2026-11-24 09:47:12',
-    }),
-  },
-  {
-    id: 'eml-7046',
-    messageCode: 'EML-7046',
-    timestamp: '2026-11-24 09:05:44',
-    status: 'Delivered',
-    trigger: 'Shadow AI Agent Drift Alert · Policy NHI-AI-209',
-    triggerCategory: 'SoD & Policy',
-    recipientName: 'Lucas Meyer',
-    recipientEmail: 'lucas.meyer@identra-corp.io',
-    recipientRole: 'Data Owner (Head of Data Governance)',
-    cc: ['secops@identra-corp.io', 'priya.nair@identra-corp.io'],
-    from: 'IDENTRA Security & Governance <no-reply@identra-corp.io>',
-    subject: '[CRITICAL] Shadow AI Agent Grant Detected on Snowflake PROD_PII',
-    smtpProvider: 'Microsoft 365 Graph Mail · TLS 1.3',
-    deliveryLatencyMs: 196,
-    htmlBody: buildBrandedIdentraEmailHtml({
+    }
+  ),
+  makeEmailNotification(
+    {
+      id: 'eml-7046',
+      messageCode: 'EML-7046',
+      timestamp: '2026-11-24 09:05:44',
+      status: 'Delivered',
+      trigger: 'Shadow AI Agent Drift Alert · Policy NHI-AI-209',
+      triggerCategory: 'SoD & Policy',
+      recipientName: 'Lucas Meyer',
+      recipientEmail: 'lucas.meyer@identra-corp.io',
+      recipientRole: 'Data Owner (Head of Data Governance)',
+      cc: ['secops@identra-corp.io', 'priya.nair@identra-corp.io'],
+      from: 'IDENTRA Identity Notifications <no-reply@identra-corp.io>',
+      subject: '[CRITICAL] Shadow AI Agent Grant Detected on Snowflake PROD_PII',
+      smtpProvider: 'smtp.office365.com:587 · STARTTLS (TLS 1.3)',
+      deliveryLatencyMs: 196,
+    },
+    {
       badgeText: 'CRITICAL · NHI-AI-209 VIOLATION',
       badgeTone: 'rose',
       headline: 'Unattested AI Agent Acquired Raw PII Read Access',
@@ -2997,26 +3236,28 @@ export const INITIAL_EMAIL_NOTIFICATIONS: DemoEmailNotification[] = [
         'Triggered by Identity Process++ Domain 06 (Non-Human Governance) & GDPR Art. 32 enforcement.',
       messageCode: 'EML-7046',
       timestamp: '2026-11-24 09:05:44',
-    }),
-  },
-  {
-    id: 'eml-7045',
-    messageCode: 'EML-7045',
-    timestamp: '2026-11-24 08:33:08',
-    status: 'Bounced',
-    trigger: 'Contractor Off-board Confirmation · Mark Wilson (B2B Expiry)',
-    triggerCategory: 'JML Lifecycle',
-    recipientName: 'Mark Wilson',
-    recipientEmail: 'mark.wilson@ext-audit.io',
-    recipientRole: 'External Contractor (Terminated)',
-    cc: ['priya.nair@identra-corp.io'],
-    from: 'IDENTRA Identity Notifications <no-reply@identra-corp.io>',
-    subject: 'Access Termination Notice — Vanguard External Assurance Q4 Engagement',
-    smtpProvider: 'SendGrid Enterprise Relay · TLS 1.3',
-    deliveryLatencyMs: null,
-    errorMessage:
-      'SMTP 550 5.1.1 Mailbox unavailable on ext-audit.io — delivery automatically escalated to Sponsor Priya Nair (priya.nair@identra-corp.io).',
-    htmlBody: buildBrandedIdentraEmailHtml({
+    }
+  ),
+  makeEmailNotification(
+    {
+      id: 'eml-7045',
+      messageCode: 'EML-7045',
+      timestamp: '2026-11-24 08:33:08',
+      status: 'Bounced',
+      trigger: 'Contractor Off-board Confirmation · Mark Wilson (B2B Expiry)',
+      triggerCategory: 'JML Lifecycle',
+      recipientName: 'Mark Wilson',
+      recipientEmail: 'mark.wilson@ext-audit.io',
+      recipientRole: 'External Contractor (Terminated)',
+      cc: ['priya.nair@identra-corp.io'],
+      from: 'IDENTRA Identity Notifications <no-reply@identra-corp.io>',
+      subject: 'Access Termination Notice — Vanguard External Assurance Q4 Engagement',
+      smtpProvider: 'smtp.office365.com:587 · STARTTLS (TLS 1.3)',
+      deliveryLatencyMs: null,
+      errorMessage:
+        'SMTP 550 5.1.1 Mailbox unavailable on ext-audit.io — delivery automatically escalated to Sponsor Priya Nair (priya.nair@identra-corp.io).',
+    },
+    {
       badgeText: 'CONTRACTOR OFF-BOARD NOTICE',
       badgeTone: 'amber',
       headline: 'Engagement Access Deactivated & Credentials Revoked',
@@ -3039,24 +3280,26 @@ export const INITIAL_EMAIL_NOTIFICATIONS: DemoEmailNotification[] = [
         'If an engagement extension has been approved, your sponsor must update the B2B Partner Lifecycle Portal.',
       messageCode: 'EML-7045',
       timestamp: '2026-11-24 08:33:08',
-    }),
-  },
-  {
-    id: 'eml-7044',
-    messageCode: 'EML-7044',
-    timestamp: '2026-11-24 08:16:02',
-    status: 'Delivered',
-    trigger: 'SOX-SOD-402 Toxic Combination Alert · Mover Transfer',
-    triggerCategory: 'SoD & Policy',
-    recipientName: 'David Chen',
-    recipientEmail: 'david.chen@identra-corp.io',
-    recipientRole: 'SOX Control Owner (Treasury Director)',
-    cc: ['controller-office@identra-corp.io'],
-    from: 'IDENTRA Security & Governance <no-reply@identra-corp.io>',
-    subject: '[SOX-402 BREACH] Toxic Role Conflict Detected for Elena Vance',
-    smtpProvider: 'Microsoft 365 Graph Mail · TLS 1.3',
-    deliveryLatencyMs: 241,
-    htmlBody: buildBrandedIdentraEmailHtml({
+    }
+  ),
+  makeEmailNotification(
+    {
+      id: 'eml-7044',
+      messageCode: 'EML-7044',
+      timestamp: '2026-11-24 08:16:02',
+      status: 'Delivered',
+      trigger: 'SOX-SOD-402 Toxic Combination Alert · Mover Transfer',
+      triggerCategory: 'SoD & Policy',
+      recipientName: 'David Chen',
+      recipientEmail: 'david.chen@identra-corp.io',
+      recipientRole: 'SOX Control Owner (Treasury Director)',
+      cc: ['controller-office@identra-corp.io'],
+      from: 'IDENTRA Identity Notifications <no-reply@identra-corp.io>',
+      subject: '[SOX-402 BREACH] Toxic Role Conflict Detected for Elena Vance',
+      smtpProvider: 'smtp.office365.com:587 · STARTTLS (TLS 1.3)',
+      deliveryLatencyMs: 241,
+    },
+    {
       badgeText: 'SOX-SOD-402 VIOLATION · 48H SLA',
       badgeTone: 'rose',
       headline: 'Segregation of Duties Breach Requires Remediation',
@@ -3080,23 +3323,25 @@ export const INITIAL_EMAIL_NOTIFICATIONS: DemoEmailNotification[] = [
         'Unresolved SOX-402 violations automatically escalate to the Controller Office after 48 hours.',
       messageCode: 'EML-7044',
       timestamp: '2026-11-24 08:16:02',
-    }),
-  },
-  {
-    id: 'eml-7043',
-    messageCode: 'EML-7043',
-    timestamp: '2026-11-24 08:00:19',
-    status: 'Delivered',
-    trigger: 'Scheduled Connector Import Failed · Microsoft Entra ID (IMP-4108)',
-    triggerCategory: 'Operations',
-    recipientName: 'Identity Platform Ops',
-    recipientEmail: 'iam-ops@identra-corp.io',
-    recipientRole: 'Operations On-Call Distribution',
-    from: 'IDENTRA Operations Monitor <no-reply@identra-corp.io>',
-    subject: '[ALERT] Entra ID Delta Import IMP-4108 Failed (HTTP 401 Graph Token)',
-    smtpProvider: 'Microsoft 365 Graph Mail · TLS 1.3',
-    deliveryLatencyMs: 175,
-    htmlBody: buildBrandedIdentraEmailHtml({
+    }
+  ),
+  makeEmailNotification(
+    {
+      id: 'eml-7043',
+      messageCode: 'EML-7043',
+      timestamp: '2026-11-24 08:00:19',
+      status: 'Delivered',
+      trigger: 'Scheduled Connector Import Failed · Microsoft Entra ID (IMP-4108)',
+      triggerCategory: 'Operations',
+      recipientName: 'Identity Platform Ops',
+      recipientEmail: 'iam-ops@identra-corp.io',
+      recipientRole: 'Operations On-Call Distribution',
+      from: 'IDENTRA Identity Notifications <no-reply@identra-corp.io>',
+      subject: '[ALERT] Entra ID Delta Import IMP-4108 Failed (HTTP 401 Graph Token)',
+      smtpProvider: 'smtp.office365.com:587 · STARTTLS (TLS 1.3)',
+      deliveryLatencyMs: 175,
+    },
+    {
       badgeText: 'CONNECTOR IMPORT FAILURE',
       badgeTone: 'amber',
       headline: 'Scheduled Delta Import IMP-4108 Aborted Cleanly',
@@ -3117,23 +3362,25 @@ export const INITIAL_EMAIL_NOTIFICATIONS: DemoEmailNotification[] = [
       ctaUrl: 'https://identra-two.vercel.app/#demo',
       messageCode: 'EML-7043',
       timestamp: '2026-11-24 08:00:19',
-    }),
-  },
-  {
-    id: 'eml-7042',
-    messageCode: 'EML-7042',
-    timestamp: '2026-11-24 07:45:05',
-    status: 'Queued',
-    trigger: 'Birthright Evaluation · BR-005 (London HQ Finance M365 E5 Uplift)',
-    triggerCategory: 'Birthright',
-    recipientName: 'Claire Vance',
-    recipientEmail: 'claire.vance@identra-corp.io',
-    recipientRole: 'Finance Operations Manager',
-    from: 'IDENTRA Identity Notifications <no-reply@identra-corp.io>',
-    subject: 'Birthright Summary: 2 Identities Matched BR-005 (M365 E5 & SAP Fiori)',
-    smtpProvider: 'Microsoft 365 Graph Mail · TLS 1.3',
-    deliveryLatencyMs: null,
-    htmlBody: buildBrandedIdentraEmailHtml({
+    }
+  ),
+  makeEmailNotification(
+    {
+      id: 'eml-7042',
+      messageCode: 'EML-7042',
+      timestamp: '2026-11-24 07:45:05',
+      status: 'Queued',
+      trigger: 'Birthright Evaluation · BR-005 (London HQ Finance M365 E5 Uplift)',
+      triggerCategory: 'Birthright',
+      recipientName: 'Claire Vance',
+      recipientEmail: 'claire.vance@identra-corp.io',
+      recipientRole: 'Finance Operations Manager',
+      from: 'IDENTRA Identity Notifications <no-reply@identra-corp.io>',
+      subject: 'Birthright Summary: 2 Identities Matched BR-005 (M365 E5 & SAP Fiori)',
+      smtpProvider: 'smtp.office365.com:587 · STARTTLS (TLS 1.3)',
+      deliveryLatencyMs: null,
+    },
+    {
       badgeText: 'BIRTHRIGHT POLICY DIGEST',
       badgeTone: 'sky',
       headline: 'Hybrid Birthright Rule BR-005 Evaluated Successfully',
@@ -3150,6 +3397,6 @@ export const INITIAL_EMAIL_NOTIFICATIONS: DemoEmailNotification[] = [
       ctaUrl: 'https://identra-two.vercel.app/#demo',
       messageCode: 'EML-7042',
       timestamp: '2026-11-24 07:45:05',
-    }),
-  },
+    }
+  ),
 ];

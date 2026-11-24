@@ -12,9 +12,11 @@ import {
   INITIAL_DEMO_ROLES,
   INITIAL_EMAIL_NOTIFICATIONS,
   INITIAL_IMPORT_RUNS,
+  INITIAL_PLATFORM_CONFIG,
   INITIAL_PROVISIONING_JOBS,
   buildBrandedIdentraEmailHtml,
   evaluateBirthrightMatches,
+  type BrandedEmailTemplateInput,
   type DemoApplication,
   type DemoAuditEntry,
   type DemoBirthrightRule,
@@ -29,6 +31,9 @@ import {
   type DemoRole,
   type DemoSectionId,
   type DemoTargetAccount,
+  type MasterEmailTemplateConfig,
+  type PlatformConfig,
+  type SmtpConfig,
 } from '@/data/demoSampleData';
 import { useSceneStore } from '@/store/useSceneStore';
 
@@ -54,12 +59,20 @@ interface DemoStore {
   provisioningJobs: DemoProvisioningJob[];
   importRuns: DemoImportRun[];
   emailNotifications: DemoEmailNotification[];
+  platformConfig: PlatformConfig;
   auditLog: DemoAuditEntry[];
 
   setActiveSection: (section: DemoSectionId) => void;
   setSearchQuery: (q: string) => void;
   setSelectedPersonId: (id: string | null) => void;
   clearToast: () => void;
+
+  // Platform Configuration actions (SMTP, Master Email Template, Provisioning & Governance)
+  updateSmtpConfig: (patch: Partial<SmtpConfig>) => void;
+  testSmtpConnection: () => void;
+  updateMasterEmailTemplate: (patch: Partial<MasterEmailTemplateConfig>) => void;
+  updateProvisioningConfig: (patch: Partial<PlatformConfig['provisioning']>) => void;
+  updateGovernanceConfig: (patch: Partial<PlatformConfig['governance']>) => void;
 
   // Email Notification Log actions
   retryEmailNotification: (emailId: string) => void;
@@ -91,6 +104,7 @@ interface DemoStore {
   onboardNewJoiner: () => void;
   movePersonDepartment: (personId: string) => void;
   offboardPerson: (personId: string) => void;
+  emergencyDeactivatePerson: (personId: string, reason?: string) => void;
   mitigatePersonSod: (personId: string) => void;
 
   rotateNonHumanSecret: (id: string) => void;
@@ -127,12 +141,160 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
   provisioningJobs: INITIAL_PROVISIONING_JOBS,
   importRuns: INITIAL_IMPORT_RUNS,
   emailNotifications: INITIAL_EMAIL_NOTIFICATIONS,
+  platformConfig: INITIAL_PLATFORM_CONFIG,
   auditLog: INITIAL_DEMO_AUDIT,
 
   setActiveSection: (section) => set({ activeSection: section }),
   setSearchQuery: (q) => set({ searchQuery: q }),
   setSelectedPersonId: (id) => set({ selectedPersonId: id }),
   clearToast: () => set({ toastMessage: null }),
+
+  updateSmtpConfig: (patch) => {
+    const nextSmtp: SmtpConfig = {
+      ...get().platformConfig.smtp,
+      ...patch,
+    };
+    const stamp = timeNow();
+    set((s) => ({
+      platformConfig: {
+        ...s.platformConfig,
+        smtp: nextSmtp,
+      },
+      toastMessage: `Saved SMTP mail relay configuration (${nextSmtp.host}:${nextSmtp.port} · ${nextSmtp.authMethod}).`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'Platform Config',
+          processTag: 'SMTP-CFG',
+          tone: 'sky',
+          action: `Updated SMTP relay (${nextSmtp.host}:${nextSmtp.port} · ${nextSmtp.encryption})`,
+          target: nextSmtp.fromEmail,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  testSmtpConnection: () => {
+    const smtp = get().platformConfig.smtp;
+    const today = new Date().toISOString().slice(0, 10);
+    const stamp = timeNow();
+    const ok = smtp.host.trim().length > 0 && smtp.port > 0;
+    set((s) => ({
+      platformConfig: {
+        ...s.platformConfig,
+        smtp: {
+          ...s.platformConfig.smtp,
+          lastTestedAt: `${today} ${stamp}`,
+          connectionStatus: ok ? 'Connected' : 'Error',
+        },
+      },
+      toastMessage: ok
+        ? `SMTP handshake succeeded with ${smtp.host}:${smtp.port} (${smtp.encryption} · 142ms).`
+        : 'SMTP test failed — please enter a valid SMTP host and port.',
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'SMTP Health Check',
+          processTag: ok ? 'SMTP-OK' : 'SMTP-ERR',
+          tone: ok ? 'emerald' : 'rose',
+          action: ok
+            ? `Verified SMTP TLS handshake (${smtp.authMethod})`
+            : 'SMTP handshake test failed due to missing host',
+          target: `${smtp.host || 'unset'}:${smtp.port}`,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  updateMasterEmailTemplate: (patch) => {
+    const nextTemplate: MasterEmailTemplateConfig = {
+      ...get().platformConfig.emailTemplate,
+      ...patch,
+    };
+    const stamp = timeNow();
+    const totalUpdated = get().emailNotifications.length;
+
+    set((s) => ({
+      platformConfig: {
+        ...s.platformConfig,
+        emailTemplate: nextTemplate,
+      },
+      // Propagate master styling automatically to ALL email notifications
+      emailNotifications: s.emailNotifications.map((email) => ({
+        ...email,
+        htmlBody: buildBrandedIdentraEmailHtml(email.templateData, nextTemplate),
+      })),
+      toastMessage: `Master Email Template updated — all ${totalUpdated} email notifications inherited the new styling automatically.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'Email Branding Engine',
+          processTag: 'TPL-SYNC',
+          tone: 'emerald',
+          action: `Updated Master Email Template (${nextTemplate.brandTitle} · ${nextTemplate.accentColor}); re-rendered ${totalUpdated} notifications`,
+          target: 'All Email Notifications',
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  updateProvisioningConfig: (patch) => {
+    const stamp = timeNow();
+    set((s) => ({
+      platformConfig: {
+        ...s.platformConfig,
+        provisioning: {
+          ...s.platformConfig.provisioning,
+          ...patch,
+        },
+      },
+      toastMessage: 'Saved Provisioning & Import Engine configuration.',
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'Platform Config',
+          processTag: 'PRV-CFG',
+          tone: 'sky',
+          action: 'Updated Provisioning & Import Engine settings',
+          target: 'Operations Pipeline',
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  updateGovernanceConfig: (patch) => {
+    const stamp = timeNow();
+    set((s) => ({
+      platformConfig: {
+        ...s.platformConfig,
+        governance: {
+          ...s.platformConfig.governance,
+          ...patch,
+        },
+      },
+      toastMessage: 'Saved Governance, Birthrights & Access Review settings.',
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'Platform Config',
+          processTag: 'GOV-CFG',
+          tone: 'sky',
+          action: 'Updated Governance, Review SLA & SoD configuration',
+          target: 'Governance Engine',
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
 
   retryEmailNotification: (emailId) => {
     const email = get().emailNotifications.find((e) => e.id === emailId);
@@ -181,16 +343,25 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
     if (!email) return;
     const today = new Date().toISOString().slice(0, 10);
     const stamp = timeNow();
+    const { smtp, emailTemplate } = get().platformConfig;
     const nextCode = `EML-${7049 + get().emailNotifications.length}`;
+    const nextTemplateData: BrandedEmailTemplateInput = {
+      ...email.templateData,
+      messageCode: nextCode,
+      timestamp: `${today} ${stamp}`,
+    };
     const copy: DemoEmailNotification = {
       ...email,
       id: `eml-resend-${Date.now()}`,
       messageCode: nextCode,
       timestamp: `${today} ${stamp}`,
+      from: `${smtp.fromName} <${smtp.fromEmail}>`,
+      smtpProvider: `${smtp.host}:${smtp.port} · ${smtp.encryption}`,
       status: 'Delivered',
       deliveryLatencyMs: 195 + Math.floor(Math.random() * 85),
       errorMessage: undefined,
-      htmlBody: email.htmlBody.replaceAll(email.messageCode, nextCode),
+      templateData: nextTemplateData,
+      htmlBody: buildBrandedIdentraEmailHtml(nextTemplateData, emailTemplate),
     };
 
     set((s) => ({
@@ -742,7 +913,30 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
 
     useSceneStore.getState().simulateLifecycleEvent('Joiner');
     const joinerStamp = timeNow();
+    const { smtp, emailTemplate } = get().platformConfig;
     const joinerMsgCode = `EML-${7049 + get().emailNotifications.length}`;
+    const joinerTemplateData: BrandedEmailTemplateInput = {
+      badgeText: 'DAY-1 JOINER PROVISIONED',
+      badgeTone: 'emerald',
+      headline: `Welcome ${pick.first} — Your Day-1 Identity & Roles Are Active`,
+      greeting: `Hi ${fullName},`,
+      intro: `Your authoritative Workday HRIS joiner record (${empNo}) has been processed automatically. Your Day-1 birthright accounts and business role have been provisioned with zero manual tickets.`,
+      metadataRows: [
+        { label: 'Employee #', value: empNo, mono: true },
+        { label: 'Corporate UPN', value: newPerson.upn, mono: true },
+        { label: 'Department', value: pick.dept },
+        { label: 'Org Unit', value: pick.ou },
+        { label: 'Provisioned Role', value: `${pick.role} · Corporate SSO Standard` },
+        { label: 'Line Manager', value: pick.mgr },
+      ],
+      calloutTitle: 'Zero-Trust First Sign-In',
+      calloutText:
+        'Enroll your phishing-resistant FIDO2 passkey on first sign-in to unlock SSO across your target applications.',
+      ctaLabel: 'Activate Corporate SSO',
+      ctaUrl: 'https://identra-two.vercel.app/#demo',
+      messageCode: joinerMsgCode,
+      timestamp: `${today} ${joinerStamp}`,
+    };
     const joinerEmailNotif: DemoEmailNotification = {
       id: `eml-joiner-${Date.now()}`,
       messageCode: joinerMsgCode,
@@ -754,32 +948,12 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
       recipientEmail: newPerson.email,
       recipientRole: `New Joiner (${pick.title})`,
       cc: [`${pick.mgr.toLowerCase().replace(/\s+/g, '.')}@identra-corp.io`],
-      from: 'IDENTRA Identity Notifications <no-reply@identra-corp.io>',
-      subject: `Welcome to IDENTRA — Your Day-1 Access (${pick.role}) Is Ready`,
-      smtpProvider: 'Microsoft 365 Graph Mail · TLS 1.3',
+      from: `${smtp.fromName} <${smtp.fromEmail}>`,
+      subject: `Welcome to ${emailTemplate.brandTitle} — Your Day-1 Access (${pick.role}) Is Ready`,
+      smtpProvider: `${smtp.host}:${smtp.port} · ${smtp.encryption}`,
       deliveryLatencyMs: 224,
-      htmlBody: buildBrandedIdentraEmailHtml({
-        badgeText: 'DAY-1 JOINER PROVISIONED',
-        badgeTone: 'emerald',
-        headline: `Welcome ${pick.first} — Your Day-1 Identity & Roles Are Active`,
-        greeting: `Hi ${fullName},`,
-        intro: `Your authoritative Workday HRIS joiner record (${empNo}) has been processed automatically. Your Day-1 birthright accounts and business role have been provisioned with zero manual tickets.`,
-        metadataRows: [
-          { label: 'Employee #', value: empNo, mono: true },
-          { label: 'Corporate UPN', value: newPerson.upn, mono: true },
-          { label: 'Department', value: pick.dept },
-          { label: 'Org Unit', value: pick.ou },
-          { label: 'Provisioned Role', value: `${pick.role} · Corporate SSO Standard` },
-          { label: 'Line Manager', value: pick.mgr },
-        ],
-        calloutTitle: 'Zero-Trust First Sign-In',
-        calloutText:
-          'Enroll your phishing-resistant FIDO2 passkey on first sign-in to unlock SSO across your target applications.',
-        ctaLabel: 'Activate Corporate SSO',
-        ctaUrl: 'https://identra-two.vercel.app/#demo',
-        messageCode: joinerMsgCode,
-        timestamp: `${today} ${joinerStamp}`,
-      }),
+      templateData: joinerTemplateData,
+      htmlBody: buildBrandedIdentraEmailHtml(joinerTemplateData, emailTemplate),
     };
 
     set((s) => ({
@@ -946,6 +1120,215 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
         ...s.auditLog,
       ],
     }));
+  },
+
+  emergencyDeactivatePerson: (personId, reason) => {
+    const person = get().people.find((p) => p.id === personId);
+    if (!person || person.jmlStatus === 'Deactivated') return;
+
+    useSceneStore.getState().simulateLifecycleEvent('Leaver');
+    if (personId === 'p-mark') {
+      useSceneStore.getState().resolveAttentionItem('att-orphans');
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const stamp = timeNow();
+    const cleanReason =
+      reason?.trim() || 'Emergency security deactivation triggered by Administrator';
+    const cleanTargetSystems = Array.from(
+      new Set(
+        person.applications.map((app) =>
+          app.replace(/\s*\((Disabled|Orphan Key)\)/gi, '').trim()
+        )
+      )
+    );
+    const systemsToDisable =
+      cleanTargetSystems.length > 0
+        ? cleanTargetSystems
+        : ['Active Directory', 'Microsoft Entra ID', 'Okta Workforce'];
+
+    const mapToProvApp = (name: string): DemoProvisioningJob['application'] => {
+      if (name.includes('Active Directory')) return 'Active Directory';
+      if (name.includes('Entra')) return 'Microsoft Entra ID';
+      if (name.includes('SAP')) return 'SAP S/4HANA Finance';
+      if (name.includes('AWS')) return 'AWS Prod Vault';
+      if (name.includes('Snowflake')) return 'Snowflake PII Lake';
+      return 'Okta Workforce';
+    };
+
+    const existingJobBase = 9100 + get().provisioningJobs.length;
+    const emergencyJobs: DemoProvisioningJob[] = systemsToDisable.map((sys, idx) => ({
+      id: `job-emrg-${Date.now()}-${idx}`,
+      jobCode: `PRV-${existingJobBase + idx}`,
+      identity: person.name,
+      identityEmail: person.email,
+      entitlementOrRole: `Emergency Kill-Switch · Disable ${sys} Account`,
+      application: mapToProvApp(sys),
+      operation: 'Update',
+      status: 'Completed',
+      triggeredBy: 'Emergency Deactivation Kill-Switch',
+      timestamp: stamp,
+      durationMs: 120 + idx * 35,
+      mappings: [
+        {
+          attribute: 'accountStatus',
+          before: 'Enabled',
+          after: 'Disabled (Emergency Lock)',
+          rule: 'SEC.EmergencyDeactivate.DisableAccount',
+        },
+        {
+          attribute: 'activeSessions',
+          before: 'Active',
+          after: 'Revoked & Tokens Invalidated',
+          rule: 'SEC.EmergencyDeactivate.RevokeTokens',
+        },
+      ],
+    }));
+
+    const { smtp, emailTemplate } = get().platformConfig;
+    const msgCode = `EML-${7049 + get().emailNotifications.length}`;
+    const mgrEmail = `${person.manager.toLowerCase().replace(/\s+/g, '.')}@identra-corp.io`;
+    const alertTemplateData: BrandedEmailTemplateInput = {
+      badgeText: 'EMERGENCY DEACTIVATION EXECUTED',
+      badgeTone: 'rose',
+      headline: `Identity Emergency Deactivated: ${person.name}`,
+      greeting: `Attention ${person.manager} & Security Operations,`,
+      intro: `An emergency deactivation kill-switch was executed for ${person.name} (${person.employeeNumber}). All connected target system accounts have been immediately disabled, active sessions revoked, and the identity status set to Deactivated.`,
+      metadataRows: [
+        { label: 'Identity', value: `${person.name} (${person.employeeNumber})`, mono: true },
+        { label: 'New Identity Status', value: 'Deactivated (Locked)', mono: true },
+        { label: 'Disabled Target Systems', value: systemsToDisable.join(' · ') },
+        { label: 'Revoked Roles', value: `${person.roles.length} active role(s) stripped` },
+        { label: 'Reason', value: cleanReason },
+        { label: 'Executed By', value: 'Administrator (Emergency Kill-Switch)' },
+      ],
+      calloutTitle: 'All Target Accounts Disabled',
+      calloutText: `Provisioning Engine executed ${emergencyJobs.length} immediate disable jobs across ${systemsToDisable.join(', ')}. An immutable audit record has been sealed in the identity Change History.`,
+      ctaLabel: 'Inspect Identity Audit History',
+      ctaUrl: 'https://identra-two.vercel.app/#demo',
+      messageCode: msgCode,
+      timestamp: `${today} ${stamp}`,
+    };
+
+    const emergencyEmail: DemoEmailNotification = {
+      id: `eml-emrg-${Date.now()}`,
+      messageCode: msgCode,
+      timestamp: `${today} ${stamp}`,
+      status: 'Delivered',
+      trigger: `Emergency Identity Deactivation · ${person.name} (${person.employeeNumber})`,
+      triggerCategory: 'SoD & Policy',
+      recipientName: person.manager,
+      recipientEmail: mgrEmail,
+      recipientRole: 'Line Manager / Escalation Contact',
+      cc: ['secops@identra-corp.io', 'iam-ops@identra-corp.io'],
+      from: `${smtp.fromName} <${smtp.fromEmail}>`,
+      subject: `[EMERGENCY] Identity Deactivated & All Target Accounts Disabled — ${person.name}`,
+      smtpProvider: `${smtp.host}:${smtp.port} · ${smtp.encryption}`,
+      deliveryLatencyMs: 148,
+      templateData: alertTemplateData,
+      htmlBody: buildBrandedIdentraEmailHtml(alertTemplateData, emailTemplate),
+    };
+
+    set((s) => {
+      const updatedExistingAccounts = s.accounts.map((a) =>
+        a.personId === personId ||
+        (a.correlatedIdentity && a.correlatedIdentity.includes(person.name))
+          ? {
+              ...a,
+              accountStatus: 'Disabled' as const,
+              correlationState: 'Disabled (Leaver)' as const,
+              riskScore: 0,
+            }
+          : a
+      );
+
+      // Ensure every target system on the identity has a disabled account entry in Accounts inventory
+      const existingAppsForPerson = new Set(
+        updatedExistingAccounts
+          .filter((a) => a.personId === personId)
+          .map((a) => a.application.toLowerCase())
+      );
+
+      const extraDisabledAccounts: DemoTargetAccount[] = systemsToDisable
+        .filter((sys) => !existingAppsForPerson.has(sys.toLowerCase()))
+        .map((sys, idx) => ({
+          id: `acc-emrg-${Date.now()}-${idx}`,
+          accountName: person.upn,
+          application: sys,
+          accountType: person.type === 'Contractor' ? 'Contractor' : 'Human',
+          personId: person.id,
+          correlatedIdentity: person.name,
+          correlationState: 'Disabled (Leaver)',
+          accountStatus: 'Disabled',
+          privileged: false,
+          lastLogin: `Locked ${stamp}`,
+          daysInactive: 0,
+          riskScore: 0,
+        }));
+
+      return {
+        people: s.people.map((p) =>
+          p.id === personId
+            ? {
+                ...p,
+                jmlStatus: 'Deactivated',
+                hrEndDate: p.hrEndDate ?? today,
+                riskScore: 0,
+                roles: [],
+                applications: systemsToDisable.map((sys) => `${sys} (Disabled)`),
+                sodAlert: undefined,
+                lastAttestation: `Emergency deactivated ${stamp} · ${systemsToDisable.length} target accounts disabled`,
+                changeHistory: [
+                  {
+                    id: `h-emrg-${Date.now()}`,
+                    timestamp: `${today} ${stamp}`,
+                    source: 'Emergency Kill-Switch (Admin)',
+                    category: 'Emergency Deactivation',
+                    summary: `Emergency deactivation executed: disabled accounts across all ${systemsToDisable.length} target systems (${systemsToDisable.join(', ')}). Reason: ${cleanReason}.`,
+                    changes: [
+                      { field: 'identityStatus', before: p.jmlStatus, after: 'Deactivated' },
+                      {
+                        field: 'targetAccounts',
+                        before: `${systemsToDisable.length} Enabled (${systemsToDisable.join(', ')})`,
+                        after: 'All Target Accounts Disabled',
+                      },
+                      {
+                        field: 'activeRoles',
+                        before: p.roles.length > 0 ? p.roles.join(', ') : 'None',
+                        after: '0 (All Revoked)',
+                      },
+                      { field: 'emergencyReason', before: null, after: cleanReason },
+                    ],
+                  },
+                  ...p.changeHistory,
+                ],
+              }
+            : p
+        ),
+        accounts: [...extraDisabledAccounts, ...updatedExistingAccounts],
+        entitlements: s.entitlements.map((e) =>
+          e.assignedTo.includes(person.name) ? { ...e, status: 'Revoked' } : e
+        ),
+        policies: s.policies.map((pol) =>
+          pol.affectedIdentity?.includes(person.name) ? { ...pol, violations: 0 } : pol
+        ),
+        provisioningJobs: [...emergencyJobs, ...s.provisioningJobs],
+        emailNotifications: [emergencyEmail, ...s.emailNotifications],
+        toastMessage: `Emergency deactivated ${person.name}: disabled accounts across all ${systemsToDisable.length} target systems and logged audit history.`,
+        auditLog: [
+          {
+            id: `aud-${Date.now()}`,
+            time: stamp,
+            actor: 'Emergency Kill-Switch',
+            processTag: 'EMRG-DEACT',
+            tone: 'rose',
+            action: `Emergency deactivated identity & disabled ${systemsToDisable.length} target system accounts (${cleanReason})`,
+            target: person.name,
+          },
+          ...s.auditLog,
+        ],
+      };
+    });
   },
 
   mitigatePersonSod: (personId) => {
@@ -1148,7 +1531,32 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
 
     const today = new Date().toISOString().slice(0, 10);
     const stamp = timeNow();
+    const { smtp, emailTemplate } = get().platformConfig;
     const revMsgCode = `EML-${7049 + get().emailNotifications.length}`;
+    const reviewTemplateData: BrandedEmailTemplateInput = {
+      badgeText: `CERTIFICATION ${decision.toUpperCase()}`,
+      badgeTone: decision === 'Approved' ? 'emerald' : 'amber',
+      headline: `Your Access to ${item.roleOrEntitlement} Was ${decision}`,
+      greeting: `Hello ${item.identity},`,
+      intro: `Reviewer ${item.reviewer} has finalized an attestation decision under workflow ${item.workflowType} (${item.workflowCode}).`,
+      metadataRows: [
+        { label: 'Decision', value: decision, mono: true },
+        { label: 'Entitlement / Role', value: item.roleOrEntitlement },
+        { label: 'Target System', value: item.application },
+        { label: 'Selected Workflow', value: `${item.workflowType} (${item.workflowCode})`, mono: true },
+        { label: 'Certifying Reviewer', value: item.reviewer },
+      ],
+      calloutTitle:
+        decision === 'Revoked' ? 'Automated Deprovisioning Triggered' : 'Audit Proof Sealed',
+      calloutText:
+        decision === 'Revoked'
+          ? `IDENTRA Provisioning Engine has queued automatic revocation of ${item.roleOrEntitlement} on ${item.application}.`
+          : 'No action is required on your part. Your certified access remains active through the next quarterly cycle.',
+      ctaLabel: 'View Certification Receipt',
+      ctaUrl: 'https://identra-two.vercel.app/#demo',
+      messageCode: revMsgCode,
+      timestamp: `${today} ${stamp}`,
+    };
     const reviewNotif: DemoEmailNotification = {
       id: `eml-rev-${Date.now()}`,
       messageCode: revMsgCode,
@@ -1160,34 +1568,12 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
       recipientEmail: item.identitySnapshot.email.replace(/^owner:\s*/i, ''),
       recipientRole: item.identityTitle,
       cc: [`${item.reviewer.toLowerCase().replace(/\s+/g, '.')}@identra-corp.io`],
-      from: 'IDENTRA Identity Notifications <no-reply@identra-corp.io>',
+      from: `${smtp.fromName} <${smtp.fromEmail}>`,
       subject: `Access Certification ${decision}: ${item.roleOrEntitlement}`,
-      smtpProvider: 'Microsoft 365 Graph Mail · TLS 1.3',
+      smtpProvider: `${smtp.host}:${smtp.port} · ${smtp.encryption}`,
       deliveryLatencyMs: 212,
-      htmlBody: buildBrandedIdentraEmailHtml({
-        badgeText: `CERTIFICATION ${decision.toUpperCase()}`,
-        badgeTone: decision === 'Approved' ? 'emerald' : 'amber',
-        headline: `Your Access to ${item.roleOrEntitlement} Was ${decision}`,
-        greeting: `Hello ${item.identity},`,
-        intro: `Reviewer ${item.reviewer} has finalized an attestation decision under workflow ${item.workflowType} (${item.workflowCode}).`,
-        metadataRows: [
-          { label: 'Decision', value: decision, mono: true },
-          { label: 'Entitlement / Role', value: item.roleOrEntitlement },
-          { label: 'Target System', value: item.application },
-          { label: 'Selected Workflow', value: `${item.workflowType} (${item.workflowCode})`, mono: true },
-          { label: 'Certifying Reviewer', value: item.reviewer },
-        ],
-        calloutTitle:
-          decision === 'Revoked' ? 'Automated Deprovisioning Triggered' : 'Audit Proof Sealed',
-        calloutText:
-          decision === 'Revoked'
-            ? `IDENTRA Provisioning Engine has queued automatic revocation of ${item.roleOrEntitlement} on ${item.application}.`
-            : 'No action is required on your part. Your certified access remains active through the next quarterly cycle.',
-        ctaLabel: 'View Certification Receipt',
-        ctaUrl: 'https://identra-two.vercel.app/#demo',
-        messageCode: revMsgCode,
-        timestamp: `${today} ${stamp}`,
-      }),
+      templateData: reviewTemplateData,
+      htmlBody: buildBrandedIdentraEmailHtml(reviewTemplateData, emailTemplate),
     };
 
     set((s) => ({
@@ -1290,6 +1676,7 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
       provisioningJobs: INITIAL_PROVISIONING_JOBS,
       importRuns: INITIAL_IMPORT_RUNS,
       emailNotifications: INITIAL_EMAIL_NOTIFICATIONS,
+      platformConfig: INITIAL_PLATFORM_CONFIG,
       auditLog: INITIAL_DEMO_AUDIT,
       selectedPersonId: null,
       toastMessage: 'Reset all IDENTRA proof-of-concept sample data to initial baseline.',
