@@ -846,6 +846,27 @@ export function ConfigurationView() {
 
               <div>
                 <label className="block font-mono text-[10px] font-semibold text-slate-500 uppercase">
+                  Pending Approval Escalation Threshold
+                </label>
+                <select
+                  value={govDraft.approvalEscalationHours}
+                  onChange={(e) =>
+                    setGovDraft((g) => ({
+                      ...g,
+                      approvalEscalationHours: Number(e.target.value) as 12 | 24 | 48 | 72,
+                    }))
+                  }
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-[#F8FAFC] px-3 py-2 font-mono text-xs text-[#0F172A]"
+                >
+                  <option value={12}>After 12 hours (Urgent)</option>
+                  <option value={24}>After 24 hours (Fast)</option>
+                  <option value={48}>After 48 hours (Standard)</option>
+                  <option value={72}>After 72 hours (Extended)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-mono text-[10px] font-semibold text-slate-500 uppercase">
                   SoD Enforcement Posture
                 </label>
                 <select

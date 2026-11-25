@@ -14,6 +14,7 @@ import {
   FileCheck2,
   GitBranch,
   GitMerge,
+  Inbox,
   KeyRound,
   LayoutDashboard,
   Mail,
@@ -26,6 +27,7 @@ import {
   Shield,
   ShieldAlert,
   ShieldCheck,
+  ShoppingBag,
   Sparkles,
   UserPlus,
   Users,
@@ -36,12 +38,14 @@ import { IdentraMark } from '@/components/ui/Primitives';
 import { useDemoStore } from '@/store/useDemoStore';
 import { useSceneStore } from '@/store/useSceneStore';
 import { DashboardView } from '@/demo/views/DashboardView';
+import { MyTasksView } from '@/demo/views/MyTasksView';
 import { NonHumanView, PeopleView } from '@/demo/views/IdentitiesViews';
 import {
   ApplicationsView,
   EntitlementsView,
   RolesView,
 } from '@/demo/views/AccessViews';
+import { AccessMarketplaceView } from '@/demo/views/AccessMarketplaceView';
 import { RoleMiningView } from '@/demo/views/RoleMiningView';
 import { BirthrightsView } from '@/demo/views/BirthrightsView';
 import {
@@ -75,7 +79,10 @@ interface NavGroup {
 const SIDEBAR_NAV: NavGroup[] = [
   {
     group: 'OVERVIEW',
-    items: [{ id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard }],
+    items: [
+      { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { id: 'my-tasks', label: 'My Tasks & Requests', icon: Inbox },
+    ],
   },
   {
     group: 'IDENTITIES',
@@ -87,6 +94,7 @@ const SIDEBAR_NAV: NavGroup[] = [
   {
     group: 'ACCESS',
     items: [
+      { id: 'access-marketplace', label: 'Access Marketplace', icon: ShoppingBag },
       { id: 'applications', label: 'Applications', icon: Box },
       { id: 'entitlements', label: 'Entitlements', icon: KeyRound },
       { id: 'roles', label: 'Roles', icon: Shield },
@@ -197,6 +205,10 @@ export function DemoLayout() {
       s.contractorRequests.filter((r) => r.status === 'Pending Approval').length +
       s.entitlementRequests.filter((r) => r.status === 'Pending Approval').length
   );
+  const pendingAccessRequests = useDemoStore(
+    (s) => s.accessRequests.filter((r) => r.status === 'Pending Approval').length
+  );
+  const totalMyTasksCount = pendingAccessRequests + pendingReviews + pendingOnboarding;
 
   // Auto-dismiss live Process++ toast notifications
   useEffect(() => {
@@ -208,6 +220,7 @@ export function DemoLayout() {
   const crumb = getBreadcrumb(activeSection);
 
   const badgeFor = (id: DemoSectionId): number | null => {
+    if (id === 'my-tasks' && totalMyTasksCount > 0) return totalMyTasksCount;
     if (id === 'onboarding' && pendingOnboarding > 0) return pendingOnboarding;
     if (id === 'role-mining' && miningOutliersCount > 0) return miningOutliersCount;
     if (id === 'governance-assurance' && assuranceViolations > 0) return assuranceViolations;
@@ -225,10 +238,14 @@ export function DemoLayout() {
     switch (activeSection) {
       case 'dashboard':
         return <DashboardView />;
+      case 'my-tasks':
+        return <MyTasksView />;
       case 'people':
         return <PeopleView />;
       case 'non-human':
         return <NonHumanView />;
+      case 'access-marketplace':
+        return <AccessMarketplaceView />;
       case 'applications':
         return <ApplicationsView />;
       case 'entitlements':

@@ -1,5 +1,6 @@
 export type DemoSectionId =
   | 'dashboard'
+  | 'my-tasks'
   | 'people'
   | 'non-human'
   | 'applications'
@@ -7,6 +8,7 @@ export type DemoSectionId =
   | 'roles'
   | 'role-mining'
   | 'birthrights'
+  | 'access-marketplace'
   | 'governance-assurance'
   | 'access-reviews'
   | 'policies-sod'
@@ -2747,6 +2749,7 @@ export interface PlatformConfig {
   governance: {
     defaultReviewWorkflow: ReviewWorkflowType;
     reviewEscalationSlaDays: 5 | 7 | 10 | 14;
+    approvalEscalationHours: 12 | 24 | 48 | 72;
     autoRevokeBirthrightsOnExit: boolean;
     sodEnforcementMode: 'Preventative Block & Alert' | 'Detective Monitor Only';
     nhiMaxSecretTtlDays: 30 | 60 | 90;
@@ -2859,6 +2862,7 @@ export const INITIAL_PLATFORM_CONFIG: PlatformConfig = {
   governance: {
     defaultReviewWorkflow: 'Manager Approval',
     reviewEscalationSlaDays: 10,
+    approvalEscalationHours: 48,
     autoRevokeBirthrightsOnExit: true,
     sodEnforcementMode: 'Preventative Block & Alert',
     nhiMaxSecretTtlDays: 60,
@@ -4440,3 +4444,579 @@ export const INITIAL_ENTITLEMENT_REQUESTS: DemoEntitlementOnboardingRequest[] = 
     submittedAt: '2026-11-24 09:15',
   },
 ];
+
+/* -------------------------------------------------------------------------- */
+/* Access Marketplace (IT Shop), Multi-Account Targets & Leave Delegation     */
+/* -------------------------------------------------------------------------- */
+
+export interface MarketplaceApproverStep {
+  step: string;
+  approverRole: string;
+  approverName: string;
+  approverRefId?: string;
+  personId?: string;
+  escalationBackup: string;
+  status: 'Approved' | 'Pending' | 'Queued' | 'Escalated' | 'Rejected';
+  delegatedTo?: string;
+  decidedAt?: string;
+}
+
+export interface MarketplaceCatalogItem {
+  id: string;
+  code: string;
+  name: string;
+  kind: 'Business Role' | 'Entitlement' | 'AD Security Group' | 'Entra ID License' | 'JIT Elevation';
+  application: string;
+  category: 'Finance & ERP' | 'Cloud & DevOps' | 'Data & Analytics' | 'Collaboration & M365' | 'Commercial & CRM';
+  sensitivity: 'Standard' | 'High' | 'Critical';
+  ownerName: string;
+  ownerRefId?: string;
+  technicalId: string;
+  description: string;
+  includedPermissions: string[];
+  supportsAccountSelection: boolean;
+  recommendedAccountType?: 'Standard' | 'Admin';
+  maxDurationDays?: number;
+  sodConflictRoles?: string[]; // Conflicts if target identity holds any role matching these strings
+  sodPolicyCode?: string;
+  sodConflictReason?: string;
+  workflowName: string;
+  workflowCode: string;
+  approvalTemplate: {
+    approverRole: string;
+    approverName: string;
+    approverRefId?: string;
+    escalationBackup: string;
+  }[];
+}
+
+export interface PersonSelectableAccount {
+  id: string;
+  accountName: string;
+  accountKind: 'Standard User' | 'Privileged Admin';
+  directory: string;
+  description: string;
+}
+
+export interface DemoAccessRequest {
+  id: string;
+  requestCode: string;
+  requestedByName: string;
+  requestedByPersonId: string;
+  targetPersonId: string;
+  targetPersonName: string;
+  primaryContextId: string;
+  primaryContextLabel: string;
+  selectedAccountId: string;
+  selectedAccountName: string;
+  selectedAccountKind: 'Standard User' | 'Privileged Admin';
+  catalogItemId: string;
+  resourceName: string;
+  resourceKind: MarketplaceCatalogItem['kind'];
+  application: string;
+  activationDate: string;
+  deactivationDate: string | null;
+  motivation: string;
+  sodStatus: 'Clean' | 'Violation Flagged (Exception)' | 'Blocked';
+  sodDetail?: string;
+  workflowCode: string;
+  workflowName: string;
+  stages: MarketplaceApproverStep[];
+  status: 'Pending Approval' | 'Approved & Provisioned' | 'Rejected';
+  submittedAt: string;
+  waitingHours: number;
+  escalatedCount: number;
+}
+
+export interface LeaveDelegationConfig {
+  enabled: boolean;
+  delegatorPersonId: string;
+  delegatorName: string;
+  standInPersonId: string;
+  standInName: string;
+  standInRefId?: string;
+  startDate: string;
+  endDate: string;
+  reason: string;
+  delegateApprovals: boolean;
+  delegateReviews: boolean;
+  delegateOnboarding: boolean;
+  updatedAt: string;
+}
+
+export const CURRENT_DEMO_USER_PERSON_ID = 'p-priya';
+
+export function getSelectableAccountsForPerson(person: DemoPerson): PersonSelectableAccount[] {
+  const baseAccounts: PersonSelectableAccount[] = [
+    {
+      id: `${person.id}-std`,
+      accountName: person.upn,
+      accountKind: 'Standard User',
+      directory: 'Active Directory / Entra ID (Standard)',
+      description: 'Day-to-day corporate user account for standard business apps & SSO.',
+    },
+  ];
+
+  // Provide dedicated Privileged Admin account option for eligible engineering, finance, data, and sales leads
+  if (person.type === 'Employee' && person.jmlStatus !== 'Deactivated') {
+    baseAccounts.push({
+      id: `${person.id}-adm`,
+      accountName: `adm-${person.samAccountName}@priv.identra.net`,
+      accountKind: 'Privileged Admin',
+      directory: 'Tier-0 Privileged Access Directory (PAW)',
+      description: 'Dedicated administrative account for elevated infrastructure, ERP, or PII operations (FIDO2 required).',
+    });
+  }
+
+  return baseAccounts;
+}
+
+export const INITIAL_MARKETPLACE_CATALOG: MarketplaceCatalogItem[] = [
+  {
+    id: 'cat-fin-ap',
+    code: 'CAT-101',
+    name: 'Finance: AP-Clerk',
+    kind: 'Business Role',
+    application: 'SAP S/4HANA Finance',
+    category: 'Finance & ERP',
+    sensitivity: 'Critical',
+    ownerName: 'Claire Vance',
+    ownerRefId: 'mgr-claire',
+    technicalId: 'SAP_ROLE: Z_FI_AP_VENDOR_CREATE',
+    description:
+      'Accounts Payable business role enabling supplier master onboarding, invoice entry, and AP sub-ledger reconciliation.',
+    includedPermissions: [
+      'SAP T-Code XK01 / BP (Vendor Master Maintenance)',
+      'SAP T-Code FB60 (Post Vendor Invoices)',
+      'AD Group: SG-Finance-AP-Specialists',
+    ],
+    supportsAccountSelection: true,
+    recommendedAccountType: 'Standard',
+    sodConflictRoles: ['Treasury: Payment Approver'],
+    sodPolicyCode: 'SOX-SOD-402',
+    sodConflictReason:
+      'Mutually exclusive with Treasury: Payment Approver (forbids vendor creation + outbound wire release).',
+    workflowName: 'Manager → SOX Control Owner Approval',
+    workflowCode: 'WF-REQ-SOX-01',
+    approvalTemplate: [
+      {
+        approverRole: 'Line Manager Approval',
+        approverName: 'Target Manager',
+        escalationBackup: 'David Chen (Treasury Director)',
+      },
+      {
+        approverRole: 'SOX Control Owner Approval',
+        approverName: 'David Chen',
+        approverRefId: 'mgr-david',
+        escalationBackup: 'Controller Office',
+      },
+    ],
+  },
+  {
+    id: 'cat-treasury-pay',
+    code: 'CAT-102',
+    name: 'Treasury: Payment Approver',
+    kind: 'Business Role',
+    application: 'SAP S/4HANA Finance',
+    category: 'Finance & ERP',
+    sensitivity: 'Critical',
+    ownerName: 'David Chen',
+    ownerRefId: 'mgr-david',
+    technicalId: 'SAP_ROLE: Z_TR_WIRE_APPROVE_50K',
+    description:
+      'Authorizes dual-signature outbound supplier wire release above R50k in SAP S/4HANA Treasury.',
+    includedPermissions: [
+      'SAP T-Code F110 (Payment Run Approval)',
+      'Dual-Signature Treasury Wire Release (>R50k)',
+      'FIDO2 Step-Up Authentication Enforcement',
+    ],
+    supportsAccountSelection: true,
+    recommendedAccountType: 'Admin',
+    sodConflictRoles: ['Finance: AP-Clerk'],
+    sodPolicyCode: 'SOX-SOD-402',
+    sodConflictReason:
+      'Cannot be granted to holders of Finance: AP-Clerk under SOX-404 Segregation of Duties.',
+    workflowName: 'Manager → Entitlement Owner → SOX Control',
+    workflowCode: 'WF-REQ-SOX-02',
+    approvalTemplate: [
+      {
+        approverRole: 'Line Manager Approval',
+        approverName: 'Target Manager',
+        escalationBackup: 'Claire Vance',
+      },
+      {
+        approverRole: 'Entitlement Owner Approval',
+        approverName: 'David Chen',
+        approverRefId: 'mgr-david',
+        escalationBackup: 'Controller Office',
+      },
+      {
+        approverRole: 'Security & SOX Sign-Off',
+        approverName: 'Priya Nair',
+        approverRefId: 'mgr-priya',
+        escalationBackup: 'Alex Carter',
+      },
+    ],
+  },
+  {
+    id: 'cat-aws-k8s',
+    code: 'CAT-103',
+    name: 'AWS Prod Vault · EKS Cluster Admin (JIT)',
+    kind: 'JIT Elevation',
+    application: 'AWS Prod Vault',
+    category: 'Cloud & DevOps',
+    sensitivity: 'Critical',
+    ownerName: 'Alex Carter',
+    ownerRefId: 'mgr-alex',
+    technicalId: 'AWS_PERM_SET: arn:aws:sso:::permissionSet/eks-prod-admin-jit',
+    description:
+      'Time-bound production Kubernetes cluster administration via AWS IAM Identity Center with full session recording.',
+    includedPermissions: [
+      'EKS:ProdClusterAdmin (Session-Recorded)',
+      'AWS CloudWatch & Pod Diagnostics',
+      'Mandatory Privileged Admin Account Binding',
+    ],
+    supportsAccountSelection: true,
+    recommendedAccountType: 'Admin',
+    maxDurationDays: 30,
+    sodConflictRoles: ['External B2B Guest Profile', 'Suspended Contractor Profile'],
+    sodPolicyCode: 'ACC-JIT-118',
+    sodConflictReason:
+      'External contractor profiles cannot hold direct Tier-0 AWS Production Cluster Admin.',
+    workflowName: 'Manager → Cloud App Owner Approval',
+    workflowCode: 'WF-REQ-CLD-03',
+    approvalTemplate: [
+      {
+        approverRole: 'Line Manager Approval',
+        approverName: 'Target Manager',
+        escalationBackup: 'Alex Carter',
+      },
+      {
+        approverRole: 'Application Owner (AWS Prod Vault)',
+        approverName: 'Alex Carter',
+        approverRefId: 'mgr-alex',
+        escalationBackup: 'Priya Nair',
+      },
+    ],
+  },
+  {
+    id: 'cat-sf-pii',
+    code: 'CAT-104',
+    name: 'Snowflake: Customer Analytics Masked Read',
+    kind: 'Entitlement',
+    application: 'Snowflake PII Lake',
+    category: 'Data & Analytics',
+    sensitivity: 'High',
+    ownerName: 'Hannah Lindqvist',
+    ownerRefId: 'mgr-cdo',
+    technicalId: 'SNOWFLAKE_ROLE: ANALYTICS_MASKED_READER',
+    description:
+      'GDPR-compliant read access to masked customer datasets with dynamic PII tokenization enabled.',
+    includedPermissions: [
+      'SELECT on PROD_ANALYTICS.MASKED_CUSTOMERS',
+      'Dynamic PII Masking Policy Enforced',
+      'Query Audit Trail Export to SIEM',
+    ],
+    supportsAccountSelection: true,
+    recommendedAccountType: 'Standard',
+    workflowName: 'Manager → Data Owner Approval',
+    workflowCode: 'WF-REQ-DAT-04',
+    approvalTemplate: [
+      {
+        approverRole: 'Line Manager Approval',
+        approverName: 'Target Manager',
+        escalationBackup: 'Hannah Lindqvist',
+      },
+      {
+        approverRole: 'Data Owner Approval (Snowflake)',
+        approverName: 'Hannah Lindqvist',
+        approverRefId: 'mgr-cdo',
+        escalationBackup: 'Lucas Meyer',
+      },
+    ],
+  },
+  {
+    id: 'cat-m365-copilot',
+    code: 'CAT-105',
+    name: 'Microsoft 365 Copilot Enterprise',
+    kind: 'Entra ID License',
+    application: 'Microsoft Entra ID',
+    category: 'Collaboration & M365',
+    sensitivity: 'Standard',
+    ownerName: 'Claire Vance',
+    ownerRefId: 'mgr-claire',
+    technicalId: 'SKU: Microsoft_365_Copilot (R550/mo)',
+    description:
+      'Enterprise AI productivity license across Teams, Excel, Word, and Outlook scoped strictly to user ACLs.',
+    includedPermissions: [
+      'Copilot for Microsoft 365 Apps (R550/mo)',
+      'Enterprise Commercial Data Protection',
+      '90-Day Usage Telemetry Reclamation Policy',
+    ],
+    supportsAccountSelection: true,
+    recommendedAccountType: 'Standard',
+    workflowName: 'Manager Approval Only',
+    workflowCode: 'WF-REQ-MGR-05',
+    approvalTemplate: [
+      {
+        approverRole: 'Line Manager Approval',
+        approverName: 'Target Manager',
+        escalationBackup: 'Claire Vance',
+      },
+    ],
+  },
+  {
+    id: 'cat-ad-sec-ops',
+    code: 'CAT-106',
+    name: 'SG-Tier1-Server-Operators',
+    kind: 'AD Security Group',
+    application: 'Active Directory',
+    category: 'Cloud & DevOps',
+    sensitivity: 'High',
+    ownerName: 'Priya Nair',
+    ownerRefId: 'mgr-priya',
+    technicalId: 'CN=SG-Tier1-Server-Operators,OU=Infra,DC=identra,DC=corp',
+    description:
+      'Delegated server operator security group for patching, service restarts, and event log diagnostics.',
+    includedPermissions: [
+      'Restart Windows Services on OU=Tier1-Servers',
+      'Read Security & Application Event Logs',
+      'Recommended for Privileged Admin Account',
+    ],
+    supportsAccountSelection: true,
+    recommendedAccountType: 'Admin',
+    maxDurationDays: 90,
+    workflowName: 'Manager → Entitlement Owner Approval',
+    workflowCode: 'WF-REQ-AD-06',
+    approvalTemplate: [
+      {
+        approverRole: 'Line Manager Approval',
+        approverName: 'Target Manager',
+        escalationBackup: 'Alex Carter',
+      },
+      {
+        approverRole: 'Entitlement Owner (AD Infra)',
+        approverName: 'Priya Nair',
+        approverRefId: 'mgr-priya',
+        escalationBackup: 'Alex Carter',
+      },
+    ],
+  },
+  {
+    id: 'cat-gh-maint',
+    code: 'CAT-107',
+    name: 'GitHub Enterprise · Core Repo Maintainer',
+    kind: 'Business Role',
+    application: 'GitHub Enterprise',
+    category: 'Cloud & DevOps',
+    sensitivity: 'High',
+    ownerName: 'Alex Carter',
+    ownerRefId: 'mgr-alex',
+    technicalId: 'GH_TEAM: identra/core-platform-maintainers',
+    description:
+      'Grants branch protection review, release tag publishing, and workflow dispatch on core repositories.',
+    includedPermissions: [
+      'Pull Request Merge Approval on protected branches',
+      'Release Pipeline Dispatch & Tag Signing',
+      'Read-Only Repository Security Advisories',
+    ],
+    supportsAccountSelection: true,
+    recommendedAccountType: 'Standard',
+    workflowName: 'Application Owner Approval',
+    workflowCode: 'WF-REQ-APP-07',
+    approvalTemplate: [
+      {
+        approverRole: 'Application Owner (GitHub)',
+        approverName: 'Alex Carter',
+        approverRefId: 'mgr-alex',
+        escalationBackup: 'Priya Nair',
+      },
+    ],
+  },
+  {
+    id: 'cat-sfdc-deal',
+    code: 'CAT-108',
+    name: 'Salesforce · Deal Desk Approver',
+    kind: 'Business Role',
+    application: 'Salesforce CRM',
+    category: 'Commercial & CRM',
+    sensitivity: 'High',
+    ownerName: 'Marcus Bell',
+    ownerRefId: 'mgr-marcus',
+    technicalId: 'SFDC_PERMSET: DealDesk_Discount_Approver',
+    description:
+      'Authorizes commercial quote approvals and enterprise contract discounting workflows in Salesforce.',
+    includedPermissions: [
+      'Approve Enterprise Quotes & Multi-Year Pricing',
+      'View Regional Pipeline & Margin Analytics',
+      'Audit-Logged Quote Sign-Off',
+    ],
+    supportsAccountSelection: true,
+    recommendedAccountType: 'Standard',
+    workflowName: 'Manager → Commercial Owner Approval',
+    workflowCode: 'WF-REQ-CRM-08',
+    approvalTemplate: [
+      {
+        approverRole: 'Line Manager Approval',
+        approverName: 'Target Manager',
+        escalationBackup: 'Marcus Bell',
+      },
+      {
+        approverRole: 'Application Owner (Salesforce)',
+        approverName: 'Marcus Bell',
+        approverRefId: 'mgr-marcus',
+        escalationBackup: 'David Chen',
+      },
+    ],
+  },
+];
+
+export const INITIAL_ACCESS_REQUESTS: DemoAccessRequest[] = [
+  {
+    id: 'req-mkt-1',
+    requestCode: 'REQ-5104',
+    requestedByName: 'Priya Nair',
+    requestedByPersonId: 'p-priya',
+    targetPersonId: 'p-priya',
+    targetPersonName: 'Priya Nair',
+    primaryContextId: 'ctx-sre-jit',
+    primaryContextLabel: 'CTX-ENG-SRE-JIT · Platform SRE · On-Call JIT Eligibility',
+    selectedAccountId: 'p-priya-adm',
+    selectedAccountName: 'adm-pnair@priv.identra.net',
+    selectedAccountKind: 'Privileged Admin',
+    catalogItemId: 'cat-aws-k8s',
+    resourceName: 'AWS Prod Vault · EKS Cluster Admin (JIT)',
+    resourceKind: 'JIT Elevation',
+    application: 'AWS Prod Vault',
+    activationDate: '2026-11-25',
+    deactivationDate: '2026-12-09',
+    motivation: 'Required on privileged admin account to lead Q4 zero-downtime EKS v1.31 cluster upgrade.',
+    sodStatus: 'Clean',
+    workflowCode: 'WF-REQ-CLD-03',
+    workflowName: 'Manager → Cloud App Owner Approval',
+    stages: [
+      {
+        step: 'Stage 1',
+        approverRole: 'Line Manager Approval',
+        approverName: 'Alex Carter',
+        approverRefId: 'mgr-alex',
+        escalationBackup: 'Hannah Lindqvist',
+        status: 'Approved',
+        decidedAt: '2026-11-23 11:10',
+      },
+      {
+        step: 'Stage 2',
+        approverRole: 'Application Owner (AWS Prod Vault)',
+        approverName: 'Alex Carter',
+        approverRefId: 'mgr-alex',
+        escalationBackup: 'David Chen',
+        status: 'Pending',
+      },
+    ],
+    status: 'Pending Approval',
+    submittedAt: '2026-11-23 09:00',
+    waitingHours: 54,
+    escalatedCount: 0,
+  },
+  {
+    id: 'req-mkt-2',
+    requestCode: 'REQ-5103',
+    requestedByName: 'Sarah Mitchell',
+    requestedByPersonId: 'p-sarah',
+    targetPersonId: 'p-sarah',
+    targetPersonName: 'Sarah Mitchell',
+    primaryContextId: 'ctx-fin-uk-fte',
+    primaryContextLabel: 'CTX-EMP-FIN-UK · Primary Employment · Finance UK',
+    selectedAccountId: 'p-sarah-std',
+    selectedAccountName: 'smitchell@corp.identra.net',
+    selectedAccountKind: 'Standard User',
+    catalogItemId: 'cat-ad-sec-ops',
+    resourceName: 'SG-Tier1-Server-Operators',
+    resourceKind: 'AD Security Group',
+    application: 'Active Directory',
+    activationDate: '2026-11-26',
+    deactivationDate: '2027-01-25',
+    motivation: 'Temporarily assisting Finance reporting server log diagnostics during year-end ledger batch runs.',
+    sodStatus: 'Clean',
+    workflowCode: 'WF-REQ-AD-06',
+    workflowName: 'Manager → Entitlement Owner Approval',
+    stages: [
+      {
+        step: 'Stage 1',
+        approverRole: 'Line Manager Approval',
+        approverName: 'Claire Vance',
+        approverRefId: 'mgr-claire',
+        escalationBackup: 'David Chen',
+        status: 'Approved',
+        decidedAt: '2026-11-24 14:15',
+      },
+      {
+        step: 'Stage 2',
+        approverRole: 'Entitlement Owner (AD Infra)',
+        approverName: 'Priya Nair',
+        approverRefId: 'mgr-priya',
+        personId: 'p-priya',
+        escalationBackup: 'Alex Carter',
+        status: 'Pending',
+      },
+    ],
+    status: 'Pending Approval',
+    submittedAt: '2026-11-24 13:40',
+    waitingHours: 24,
+    escalatedCount: 0,
+  },
+  {
+    id: 'req-mkt-3',
+    requestCode: 'REQ-5102',
+    requestedByName: 'Priya Nair',
+    requestedByPersonId: 'p-priya',
+    targetPersonId: 'p-lucas',
+    targetPersonName: 'Lucas Meyer',
+    primaryContextId: 'ctx-data-steward',
+    primaryContextLabel: 'CTX-DAT-PII-GOV · Tier-0 PII Data Stewardship',
+    selectedAccountId: 'p-lucas-std',
+    selectedAccountName: 'lmeyer@corp.identra.net',
+    selectedAccountKind: 'Standard User',
+    catalogItemId: 'cat-m365-copilot',
+    resourceName: 'Microsoft 365 Copilot Enterprise',
+    resourceKind: 'Entra ID License',
+    application: 'Microsoft Entra ID',
+    activationDate: '2026-11-20',
+    deactivationDate: null,
+    motivation: 'Enable AI-assisted GDPR policy documentation and data lineage review summaries.',
+    sodStatus: 'Clean',
+    workflowCode: 'WF-REQ-MGR-05',
+    workflowName: 'Manager Approval Only',
+    stages: [
+      {
+        step: 'Stage 1',
+        approverRole: 'Line Manager Approval',
+        approverName: 'Hannah Lindqvist',
+        approverRefId: 'mgr-cdo',
+        escalationBackup: 'Claire Vance',
+        status: 'Approved',
+        decidedAt: '2026-11-20 15:22',
+      },
+    ],
+    status: 'Approved & Provisioned',
+    submittedAt: '2026-11-20 14:05',
+    waitingHours: 0,
+    escalatedCount: 0,
+  },
+];
+
+export const INITIAL_LEAVE_DELEGATION: LeaveDelegationConfig = {
+  enabled: false,
+  delegatorPersonId: 'p-priya',
+  delegatorName: 'Priya Nair',
+  standInPersonId: 'p-lucas',
+  standInName: 'Lucas Meyer',
+  standInRefId: 'mgr-alex',
+  startDate: '2026-12-15',
+  endDate: '2027-01-04',
+  reason: 'Annual Year-End Leave — routing all governance approvals & reviews to stand-in.',
+  delegateApprovals: true,
+  delegateReviews: true,
+  delegateOnboarding: true,
+  updatedAt: 'Not active',
+};

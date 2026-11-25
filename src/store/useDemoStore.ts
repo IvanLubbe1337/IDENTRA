@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import {
   CONTRACTOR_ONBOARDING_WORKFLOWS,
+  CURRENT_DEMO_USER_PERSON_ID,
   ENTITLEMENT_ONBOARDING_WORKFLOWS,
+  INITIAL_ACCESS_REQUESTS,
   INITIAL_CONTRACTOR_REQUESTS,
   INITIAL_DEMO_ACCOUNTS,
   INITIAL_DEMO_APPS,
@@ -17,6 +19,8 @@ import {
   INITIAL_ENTITLEMENT_REQUESTS,
   INITIAL_GOVERNANCE_CONTROLS,
   INITIAL_IMPORT_RUNS,
+  INITIAL_LEAVE_DELEGATION,
+  INITIAL_MARKETPLACE_CATALOG,
   INITIAL_MINED_ROLES,
   INITIAL_MINING_OUTLIERS,
   INITIAL_PLATFORM_CONFIG,
@@ -25,6 +29,7 @@ import {
   buildBrandedIdentraEmailHtml,
   evaluateBirthrightMatches,
   type BrandedEmailTemplateInput,
+  type DemoAccessRequest,
   type DemoApplication,
   type DemoAuditEntry,
   type DemoBirthrightRule,
@@ -46,6 +51,8 @@ import {
   type DemoSectionId,
   type DemoTargetAccount,
   type GovernanceControlDomain,
+  type LeaveDelegationConfig,
+  type MarketplaceApproverStep,
   type MasterEmailTemplateConfig,
   type OnboardingApprovalStage,
   type PlatformConfig,
@@ -79,6 +86,8 @@ interface DemoStore {
   governanceControls: DemoGovernanceControl[];
   contractorRequests: DemoContractorOnboardingRequest[];
   entitlementRequests: DemoEntitlementOnboardingRequest[];
+  accessRequests: DemoAccessRequest[];
+  leaveDelegation: LeaveDelegationConfig;
   provisioningJobs: DemoProvisioningJob[];
   importRuns: DemoImportRun[];
   emailNotifications: DemoEmailNotification[];
@@ -90,6 +99,28 @@ interface DemoStore {
   setSearchQuery: (q: string) => void;
   setSelectedPersonId: (id: string | null) => void;
   clearToast: () => void;
+
+  // Access Marketplace, Escalation & Leave Delegation actions
+  submitAccessRequest: (input: {
+    targetPersonId: string;
+    primaryContextId: string;
+    primaryContextLabel: string;
+    selectedAccountId: string;
+    selectedAccountName: string;
+    selectedAccountKind: 'Standard User' | 'Privileged Admin';
+    catalogItemId: string;
+    activationDate: string;
+    deactivationDate: string | null;
+    motivation: string;
+    sodStatus: 'Clean' | 'Violation Flagged (Exception)';
+    sodDetail?: string;
+  }) => void;
+  advanceAccessRequestApproval: (
+    requestId: string,
+    decision: 'approve-stage' | 'reject'
+  ) => void;
+  escalateAccessRequest: (requestId: string) => void;
+  updateLeaveDelegation: (patch: Partial<LeaveDelegationConfig>) => void;
 
   // Contractor & Entitlement Onboarding Approval Workflow actions
   submitContractorOnboarding: (input: {
@@ -236,6 +267,8 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
   governanceControls: INITIAL_GOVERNANCE_CONTROLS,
   contractorRequests: INITIAL_CONTRACTOR_REQUESTS,
   entitlementRequests: INITIAL_ENTITLEMENT_REQUESTS,
+  accessRequests: INITIAL_ACCESS_REQUESTS,
+  leaveDelegation: INITIAL_LEAVE_DELEGATION,
   provisioningJobs: INITIAL_PROVISIONING_JOBS,
   importRuns: INITIAL_IMPORT_RUNS,
   emailNotifications: INITIAL_EMAIL_NOTIFICATIONS,
@@ -247,6 +280,584 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
   setSearchQuery: (q) => set({ searchQuery: q }),
   setSelectedPersonId: (id) => set({ selectedPersonId: id }),
   clearToast: () => set({ toastMessage: null }),
+
+  submitAccessRequest: (input) => {
+    const targetPerson = get().people.find((p) => p.id === input.targetPersonId);
+    const catalogItem = INITIAL_MARKETPLACE_CATALOG.find(
+      (c) => c.id === input.catalogItemId
+    );
+    if (!targetPerson || !catalogItem) return;
+
+    const currentUser =
+      get().people.find((p) => p.id === CURRENT_DEMO_USER_PERSON_ID) ?? targetPerson;
+    const delegation = get().leaveDelegation;
+    const today = new Date().toISOString().slice(0, 10);
+    const stamp = timeNow();
+    const reqCode = `REQ-${5105 + get().accessRequests.length}`;
+
+    const baseStages: MarketplaceApproverStep[] = catalogItem.approvalTemplate.map(
+      (tpl, idx) => {
+        const resolvedName =
+          tpl.approverName === 'Target Manager'
+            ? targetPerson.manager
+            : tpl.approverName;
+        const resolvedRef =
+          tpl.approverName === 'Target Manager'
+            ? targetPerson.managerRefId
+            : tpl.approverRefId;
+        const delegatedTo =
+          delegation.enabled &&
+          delegation.delegateApprovals &&
+          resolvedName === delegation.delegatorName
+            ? delegation.standInName
+            : undefined;
+
+        return {
+          step: `Stage ${idx + 1}`,
+          approverRole: tpl.approverRole,
+          approverName: resolvedName,
+          approverRefId: resolvedRef,
+          escalationBackup: tpl.escalationBackup,
+          status: idx === 0 ? 'Pending' : 'Queued',
+          delegatedTo,
+        };
+      }
+    );
+
+    if (input.sodStatus === 'Violation Flagged (Exception)') {
+      baseStages.push({
+        step: `Stage ${baseStages.length + 1}`,
+        approverRole: 'SoD Risk Exception Approval',
+        approverName: 'David Chen',
+        approverRefId: 'mgr-david',
+        escalationBackup: 'Controller Office',
+        status: 'Queued',
+      });
+    }
+
+    const newReq: DemoAccessRequest = {
+      id: `req-mkt-${Date.now()}`,
+      requestCode: reqCode,
+      requestedByName: currentUser.name,
+      requestedByPersonId: currentUser.id,
+      targetPersonId: targetPerson.id,
+      targetPersonName: targetPerson.name,
+      primaryContextId: input.primaryContextId,
+      primaryContextLabel: input.primaryContextLabel,
+      selectedAccountId: input.selectedAccountId,
+      selectedAccountName: input.selectedAccountName,
+      selectedAccountKind: input.selectedAccountKind,
+      catalogItemId: catalogItem.id,
+      resourceName: catalogItem.name,
+      resourceKind: catalogItem.kind,
+      application: catalogItem.application,
+      activationDate: input.activationDate,
+      deactivationDate: input.deactivationDate,
+      motivation: input.motivation.trim(),
+      sodStatus: input.sodStatus,
+      sodDetail: input.sodDetail,
+      workflowCode: catalogItem.workflowCode,
+      workflowName: catalogItem.workflowName,
+      stages: baseStages,
+      status: 'Pending Approval',
+      submittedAt: `${today} ${stamp.slice(0, 5)}`,
+      waitingHours: 0,
+      escalatedCount: 0,
+    };
+
+    const stage1 = baseStages[0];
+    const effectiveRecipient = stage1.delegatedTo ?? stage1.approverName;
+    const recipientEmail = `${effectiveRecipient.toLowerCase().replace(/\s+/g, '.')}@identra-corp.io`;
+    const { smtp, emailTemplate } = get().platformConfig;
+    const msgCode = `EML-${7049 + get().emailNotifications.length}`;
+    const tplData: BrandedEmailTemplateInput = {
+      badgeText: stage1.delegatedTo
+        ? `DELEGATED APPROVAL · ${catalogItem.workflowCode}`
+        : `ACCESS REQUEST · ${catalogItem.workflowCode}`,
+      badgeTone: input.sodStatus === 'Clean' ? 'sky' : 'amber',
+      headline: `Access Approval Required: ${catalogItem.name}`,
+      greeting: stage1.delegatedTo
+        ? `Hi ${stage1.delegatedTo} (Stand-In for ${stage1.approverName}),`
+        : `Hi ${stage1.approverName},`,
+      intro: `${currentUser.name} submitted Access Marketplace request ${reqCode} for ${targetPerson.name} targeting account ${input.selectedAccountName} (${input.selectedAccountKind}).`,
+      metadataRows: [
+        { label: 'Request Code', value: reqCode, mono: true },
+        { label: 'Target Identity', value: `${targetPerson.name} (${targetPerson.employeeNumber})` },
+        { label: 'Primary Context', value: input.primaryContextLabel },
+        { label: 'Target Account', value: `${input.selectedAccountName} (${input.selectedAccountKind})`, mono: true },
+        { label: 'Requested Resource', value: `${catalogItem.name} · ${catalogItem.application}` },
+        {
+          label: 'Validity Window',
+          value: `${input.activationDate} → ${input.deactivationDate ?? 'Indefinite'}`,
+          mono: true,
+        },
+        { label: 'SoD Check', value: input.sodStatus },
+      ],
+      calloutTitle: 'Requester Business Motivation',
+      calloutText: input.motivation.trim(),
+      ctaLabel: 'Open My Tasks & Approve',
+      ctaUrl: 'https://identra-two.vercel.app/#demo',
+      messageCode: msgCode,
+      timestamp: `${today} ${stamp}`,
+    };
+
+    const approvalEmail: DemoEmailNotification = {
+      id: `eml-req-${Date.now()}`,
+      messageCode: msgCode,
+      timestamp: `${today} ${stamp}`,
+      status: 'Delivered',
+      trigger: `Access Marketplace Request · ${reqCode} (${catalogItem.workflowName})`,
+      triggerCategory: 'Access Review',
+      recipientName: effectiveRecipient,
+      recipientEmail,
+      recipientRole: stage1.delegatedTo
+        ? `Stand-In Delegate for ${stage1.approverName}`
+        : stage1.approverRole,
+      from: `${smtp.fromName} <${smtp.fromEmail}>`,
+      subject: `Approval Needed (${reqCode}): ${catalogItem.name} for ${targetPerson.name}`,
+      smtpProvider: `${smtp.host}:${smtp.port} · ${smtp.encryption}`,
+      deliveryLatencyMs: 188,
+      templateData: tplData,
+      htmlBody: buildBrandedIdentraEmailHtml(tplData, emailTemplate),
+    };
+
+    set((s) => ({
+      accessRequests: [newReq, ...s.accessRequests],
+      emailNotifications: [approvalEmail, ...s.emailNotifications],
+      toastMessage: `Submitted ${reqCode} for ${targetPerson.name} (${input.selectedAccountKind}) — routed to ${effectiveRecipient}. Track it under My Tasks & Requests.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: currentUser.name,
+          processTag: 'MKT-REQ',
+          tone: input.sodStatus === 'Clean' ? 'sky' : 'amber',
+          action: `Requested "${catalogItem.name}" on ${input.selectedAccountName} (${reqCode})`,
+          target: targetPerson.name,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  advanceAccessRequestApproval: (requestId, decision) => {
+    const req = get().accessRequests.find((r) => r.id === requestId);
+    if (!req || req.status !== 'Pending Approval') return;
+
+    const today = new Date().toISOString().slice(0, 10);
+    const stamp = timeNow();
+    const activeIdx = req.stages.findIndex(
+      (st) => st.status === 'Pending' || st.status === 'Escalated'
+    );
+    if (activeIdx === -1) return;
+
+    const activeStage = req.stages[activeIdx];
+    const actingApprover = activeStage.delegatedTo
+      ? `${activeStage.delegatedTo} (Stand-In)`
+      : activeStage.approverName;
+
+    if (decision === 'reject') {
+      const nextStages = req.stages.map((st, idx) =>
+        idx === activeIdx
+          ? { ...st, status: 'Rejected' as const, decidedAt: `${today} ${stamp.slice(0, 5)}` }
+          : st
+      );
+      set((s) => ({
+        accessRequests: s.accessRequests.map((r) =>
+          r.id === requestId ? { ...r, stages: nextStages, status: 'Rejected' } : r
+        ),
+        toastMessage: `Rejected access request ${req.requestCode} (${req.resourceName}) for ${req.targetPersonName}.`,
+        auditLog: [
+          {
+            id: `aud-${Date.now()}`,
+            time: stamp,
+            actor: actingApprover,
+            processTag: 'REQ-REJ',
+            tone: 'rose',
+            action: `Rejected ${req.requestCode} ("${req.resourceName}") at ${activeStage.step}`,
+            target: req.targetPersonName,
+          },
+          ...s.auditLog,
+        ],
+      }));
+      return;
+    }
+
+    const nextStages: MarketplaceApproverStep[] = req.stages.map((st, idx) => {
+      if (idx === activeIdx) {
+        return { ...st, status: 'Approved', decidedAt: `${today} ${stamp.slice(0, 5)}` };
+      }
+      if (idx === activeIdx + 1) {
+        return { ...st, status: 'Pending' };
+      }
+      return st;
+    });
+
+    const allDone = nextStages.every((st) => st.status === 'Approved');
+
+    if (!allDone) {
+      const nextStage = nextStages.find((st) => st.status === 'Pending');
+      set((s) => ({
+        accessRequests: s.accessRequests.map((r) =>
+          r.id === requestId ? { ...r, stages: nextStages, waitingHours: 0 } : r
+        ),
+        toastMessage: `Approved ${activeStage.step} of ${req.requestCode} — routed to ${nextStage?.delegatedTo ?? nextStage?.approverName}.`,
+        auditLog: [
+          {
+            id: `aud-${Date.now()}`,
+            time: stamp,
+            actor: actingApprover,
+            processTag: 'REQ-APR',
+            tone: 'sky',
+            action: `Approved ${activeStage.step} of ${req.requestCode}; routed to ${nextStage?.approverRole}`,
+            target: req.targetPersonName,
+          },
+          ...s.auditLog,
+        ],
+      }));
+      return;
+    }
+
+    // Final stage approved -> Provision to target person & selected account!
+    const provApp: DemoProvisioningJob['application'] =
+      req.application === 'Active Directory' ||
+      req.application === 'Microsoft Entra ID' ||
+      req.application === 'SAP S/4HANA Finance' ||
+      req.application === 'AWS Prod Vault' ||
+      req.application === 'Snowflake PII Lake'
+        ? req.application
+        : 'Okta Workforce';
+
+    const newProvJob: DemoProvisioningJob = {
+      id: `job-req-${Date.now()}`,
+      jobCode: `PRV-${9180 + get().provisioningJobs.length}`,
+      identity: req.targetPersonName,
+      identityEmail: req.selectedAccountName,
+      entitlementOrRole: `${req.resourceName} (${req.selectedAccountKind})`,
+      application: provApp,
+      operation: 'Update',
+      status: 'Completed',
+      triggeredBy: `Access Marketplace (${req.requestCode})`,
+      timestamp: stamp,
+      durationMs: 230,
+      mappings: [
+        {
+          attribute: 'targetAccount',
+          before: null,
+          after: `${req.selectedAccountName} (${req.selectedAccountKind})`,
+          rule: 'ITShop.MultiAccount.Bind',
+        },
+        {
+          attribute: 'validityWindow',
+          before: null,
+          after: `${req.activationDate} → ${req.deactivationDate ?? 'Indefinite'}`,
+          rule: 'ITShop.TimeBound.Schedule',
+        },
+      ],
+    };
+
+    const { smtp, emailTemplate } = get().platformConfig;
+    const msgCode = `EML-${7049 + get().emailNotifications.length}`;
+    const targetPerson = get().people.find((p) => p.id === req.targetPersonId);
+    const tplData: BrandedEmailTemplateInput = {
+      badgeText: 'ACCESS PROVISIONED',
+      badgeTone: 'emerald',
+      headline: `Your Access Request ${req.requestCode} Is Now Active`,
+      greeting: `Hi ${req.targetPersonName},`,
+      intro: `All approval stages for "${req.resourceName}" have been completed. Access has been provisioned to your selected ${req.selectedAccountKind} account.`,
+      metadataRows: [
+        { label: 'Request Code', value: req.requestCode, mono: true },
+        { label: 'Resource Granted', value: `${req.resourceName} (${req.application})` },
+        { label: 'Bound Account', value: `${req.selectedAccountName} (${req.selectedAccountKind})`, mono: true },
+        { label: 'Primary Context', value: req.primaryContextLabel },
+        {
+          label: 'Active Window',
+          value: `${req.activationDate} → ${req.deactivationDate ?? 'Indefinite'}`,
+          mono: true,
+        },
+      ],
+      ctaLabel: 'View My Access',
+      ctaUrl: 'https://identra-two.vercel.app/#demo',
+      messageCode: msgCode,
+      timestamp: `${today} ${stamp}`,
+    };
+
+    const fulfilledEmail: DemoEmailNotification = {
+      id: `eml-req-ok-${Date.now()}`,
+      messageCode: msgCode,
+      timestamp: `${today} ${stamp}`,
+      status: 'Delivered',
+      trigger: `Access Request Fulfilled · ${req.requestCode}`,
+      triggerCategory: 'Access Review',
+      recipientName: req.targetPersonName,
+      recipientEmail: targetPerson?.email ?? req.selectedAccountName,
+      recipientRole: 'Access Recipient',
+      from: `${smtp.fromName} <${smtp.fromEmail}>`,
+      subject: `Access Provisioned (${req.requestCode}): ${req.resourceName}`,
+      smtpProvider: `${smtp.host}:${smtp.port} · ${smtp.encryption}`,
+      deliveryLatencyMs: 165,
+      templateData: tplData,
+      htmlBody: buildBrandedIdentraEmailHtml(tplData, emailTemplate),
+    };
+
+    set((s) => ({
+      accessRequests: s.accessRequests.map((r) =>
+        r.id === requestId
+          ? { ...r, stages: nextStages, status: 'Approved & Provisioned', waitingHours: 0 }
+          : r
+      ),
+      people: s.people.map((p) =>
+        p.id === req.targetPersonId
+          ? {
+              ...p,
+              roles: p.roles.includes(req.resourceName)
+                ? p.roles
+                : [...p.roles, req.resourceName],
+              changeHistory: [
+                {
+                  id: `h-req-${Date.now()}`,
+                  timestamp: `${today} ${stamp}`,
+                  source: `Access Marketplace (${req.requestCode})`,
+                  category: 'Provisioning',
+                  summary: `Provisioned "${req.resourceName}" to ${req.selectedAccountName} (${req.selectedAccountKind}) for ${req.activationDate} → ${req.deactivationDate ?? 'Indefinite'}.`,
+                  changes: [
+                    { field: 'grantedResource', before: null, after: req.resourceName },
+                    { field: 'targetAccount', before: null, after: `${req.selectedAccountName} (${req.selectedAccountKind})` },
+                  ],
+                },
+                ...p.changeHistory,
+              ],
+            }
+          : p
+      ),
+      provisioningJobs: [newProvJob, ...s.provisioningJobs],
+      emailNotifications: [fulfilledEmail, ...s.emailNotifications],
+      toastMessage: `Approved ${req.requestCode} — provisioned "${req.resourceName}" to ${req.selectedAccountName}.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: actingApprover,
+          processTag: 'REQ-OK',
+          tone: 'emerald',
+          action: `Final approval & provisioning of "${req.resourceName}" on ${req.selectedAccountName}`,
+          target: req.targetPersonName,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  escalateAccessRequest: (requestId) => {
+    const req = get().accessRequests.find((r) => r.id === requestId);
+    if (!req || req.status !== 'Pending Approval') return;
+    const pendingIdx = req.stages.findIndex(
+      (st) => st.status === 'Pending' || st.status === 'Escalated'
+    );
+    if (pendingIdx === -1) return;
+
+    const currentStage = req.stages[pendingIdx];
+    const slaHours = get().platformConfig.governance.approvalEscalationHours;
+    const today = new Date().toISOString().slice(0, 10);
+    const stamp = timeNow();
+
+    const escalatedStages = req.stages.map((st, idx) =>
+      idx === pendingIdx
+        ? {
+            ...st,
+            status: 'Escalated' as const,
+            approverName: st.escalationBackup,
+            delegatedTo: undefined,
+          }
+        : st
+    );
+
+    const { smtp, emailTemplate } = get().platformConfig;
+    const msgCode = `EML-${7049 + get().emailNotifications.length}`;
+    const backupEmail = `${currentStage.escalationBackup.split('(')[0].trim().toLowerCase().replace(/\s+/g, '.')}@identra-corp.io`;
+    const tplData: BrandedEmailTemplateInput = {
+      badgeText: `SLA ESCALATION · >${slaHours}H OVERDUE`,
+      badgeTone: 'amber',
+      headline: `Escalated Approval Required: ${req.requestCode} (${req.resourceName})`,
+      greeting: `Hi ${currentStage.escalationBackup},`,
+      intro: `Pending approval ${req.requestCode} waited ${req.waitingHours}h (exceeding the configured ${slaHours}h escalation SLA) without action from ${currentStage.approverName}. It has been escalated to you as backup approver.`,
+      metadataRows: [
+        { label: 'Request Code', value: req.requestCode, mono: true },
+        { label: 'Target Identity', value: req.targetPersonName },
+        { label: 'Requested Resource', value: `${req.resourceName} (${req.application})` },
+        { label: 'Original Approver', value: currentStage.approverName },
+        { label: 'Time Elapsed', value: `${req.waitingHours} hours (SLA: ${slaHours}h)`, mono: true },
+      ],
+      calloutTitle: 'Escalated Approval SLA Active',
+      calloutText: `Business motivation: "${req.motivation}"`,
+      ctaLabel: 'Action Escalated Approval',
+      ctaUrl: 'https://identra-two.vercel.app/#demo',
+      messageCode: msgCode,
+      timestamp: `${today} ${stamp}`,
+    };
+
+    const escalationEmail: DemoEmailNotification = {
+      id: `eml-esc-${Date.now()}`,
+      messageCode: msgCode,
+      timestamp: `${today} ${stamp}`,
+      status: 'Delivered',
+      trigger: `Approval SLA Escalation (>${slaHours}h) · ${req.requestCode}`,
+      triggerCategory: 'Operations',
+      recipientName: currentStage.escalationBackup,
+      recipientEmail: backupEmail,
+      recipientRole: 'Escalation Backup Approver',
+      from: `${smtp.fromName} <${smtp.fromEmail}>`,
+      subject: `[ESCALATED >${slaHours}h] Pending Approval ${req.requestCode}: ${req.resourceName}`,
+      smtpProvider: `${smtp.host}:${smtp.port} · ${smtp.encryption}`,
+      deliveryLatencyMs: 152,
+      templateData: tplData,
+      htmlBody: buildBrandedIdentraEmailHtml(tplData, emailTemplate),
+    };
+
+    set((s) => ({
+      accessRequests: s.accessRequests.map((r) =>
+        r.id === requestId
+          ? { ...r, stages: escalatedStages, escalatedCount: r.escalatedCount + 1 }
+          : r
+      ),
+      emailNotifications: [escalationEmail, ...s.emailNotifications],
+      toastMessage: `Escalated ${req.requestCode} from ${currentStage.approverName} to backup approver ${currentStage.escalationBackup} (SLA: ${slaHours}h).`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'SLA Escalation Engine',
+          processTag: 'ESC-APR',
+          tone: 'amber',
+          action: `Escalated overdue ${req.requestCode} (${req.waitingHours}h > ${slaHours}h SLA) to ${currentStage.escalationBackup}`,
+          target: req.resourceName,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  updateLeaveDelegation: (patch) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const stamp = timeNow();
+    const nextDelegation: LeaveDelegationConfig = {
+      ...get().leaveDelegation,
+      ...patch,
+      updatedAt: `${today} ${stamp.slice(0, 5)}`,
+    };
+
+    const { smtp, emailTemplate } = get().platformConfig;
+    const msgCode = `EML-${7049 + get().emailNotifications.length}`;
+    const standInEmail = `${nextDelegation.standInName.toLowerCase().replace(/\s+/g, '.')}@identra-corp.io`;
+
+    const delegationEmail: DemoEmailNotification | null = nextDelegation.enabled
+      ? (() => {
+          const tplData: BrandedEmailTemplateInput = {
+            badgeText: 'OUT-OF-OFFICE DELEGATION ACTIVE',
+            badgeTone: 'sky',
+            headline: `You Are Designated Stand-In Delegate for ${nextDelegation.delegatorName}`,
+            greeting: `Hi ${nextDelegation.standInName},`,
+            intro: `${nextDelegation.delegatorName} has activated Out-of-Office Delegation from ${nextDelegation.startDate} to ${nextDelegation.endDate}. All selected governance approvals and tasks routed to ${nextDelegation.delegatorName} will automatically forward to your queue.`,
+            metadataRows: [
+              { label: 'Delegator', value: nextDelegation.delegatorName },
+              { label: 'Stand-In Delegate', value: nextDelegation.standInName },
+              {
+                label: 'Leave Window',
+                value: `${nextDelegation.startDate} → ${nextDelegation.endDate}`,
+                mono: true,
+              },
+              {
+                label: 'Delegated Scope',
+                value: [
+                  nextDelegation.delegateApprovals ? 'Access Request Approvals' : null,
+                  nextDelegation.delegateReviews ? 'Access Reviews' : null,
+                  nextDelegation.delegateOnboarding ? 'Onboarding Approvals' : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · '),
+              },
+            ],
+            calloutTitle: 'Leave Note',
+            calloutText: nextDelegation.reason,
+            ctaLabel: 'Open Delegated Task Inbox',
+            ctaUrl: 'https://identra-two.vercel.app/#demo',
+            messageCode: msgCode,
+            timestamp: `${today} ${stamp}`,
+          };
+          return {
+            id: `eml-del-${Date.now()}`,
+            messageCode: msgCode,
+            timestamp: `${today} ${stamp}`,
+            status: 'Delivered',
+            trigger: `Leave Delegation Activated · ${nextDelegation.delegatorName} → ${nextDelegation.standInName}`,
+            triggerCategory: 'Operations',
+            recipientName: nextDelegation.standInName,
+            recipientEmail: standInEmail,
+            recipientRole: 'Designated Stand-In Delegate',
+            cc: [`${nextDelegation.delegatorName.toLowerCase().replace(/\s+/g, '.')}@identra-corp.io`],
+            from: `${smtp.fromName} <${smtp.fromEmail}>`,
+            subject: `Out-of-Office Delegation: Acting Stand-In for ${nextDelegation.delegatorName}`,
+            smtpProvider: `${smtp.host}:${smtp.port} · ${smtp.encryption}`,
+            deliveryLatencyMs: 179,
+            templateData: tplData,
+            htmlBody: buildBrandedIdentraEmailHtml(tplData, emailTemplate),
+          };
+        })()
+      : null;
+
+    set((s) => ({
+      leaveDelegation: nextDelegation,
+      // Automatically route pending access request approvals for delegator -> stand-in
+      accessRequests: s.accessRequests.map((req) => ({
+        ...req,
+        stages: req.stages.map((st) => {
+          if (st.approverName !== nextDelegation.delegatorName) return st;
+          if (st.status !== 'Pending' && st.status !== 'Queued') return st;
+          return {
+            ...st,
+            delegatedTo:
+              nextDelegation.enabled && nextDelegation.delegateApprovals
+                ? nextDelegation.standInName
+                : undefined,
+          };
+        }),
+      })),
+      // Route pending access reviews if delegateReviews is enabled
+      reviews: s.reviews.map((rev) => {
+        const isOwnedByDelegator =
+          rev.reviewer === nextDelegation.delegatorName ||
+          rev.reviewer.includes(`(Stand-In for ${nextDelegation.delegatorName})`);
+        if (!isOwnedByDelegator || rev.decision !== 'Pending') return rev;
+        return {
+          ...rev,
+          reviewer:
+            nextDelegation.enabled && nextDelegation.delegateReviews
+              ? `${nextDelegation.standInName} (Stand-In for ${nextDelegation.delegatorName})`
+              : nextDelegation.delegatorName,
+        };
+      }),
+      emailNotifications: delegationEmail
+        ? [delegationEmail, ...s.emailNotifications]
+        : s.emailNotifications,
+      toastMessage: nextDelegation.enabled
+        ? `Leave Delegation active: tasks & approvals for ${nextDelegation.delegatorName} now route to ${nextDelegation.standInName} (${nextDelegation.startDate} → ${nextDelegation.endDate}).`
+        : `Leave Delegation disabled — tasks & approvals now route directly to ${nextDelegation.delegatorName}.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: nextDelegation.delegatorName,
+          processTag: nextDelegation.enabled ? 'DEL-ON' : 'DEL-OFF',
+          tone: nextDelegation.enabled ? 'sky' : 'amber',
+          action: nextDelegation.enabled
+            ? `Delegated all pending approvals & tasks to stand-in ${nextDelegation.standInName} (${nextDelegation.startDate} → ${nextDelegation.endDate})`
+            : 'Revoked Out-of-Office stand-in delegation',
+          target: nextDelegation.standInName,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
 
   submitContractorOnboarding: (input) => {
     const wf =
@@ -2729,6 +3340,8 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
       governanceControls: INITIAL_GOVERNANCE_CONTROLS,
       contractorRequests: INITIAL_CONTRACTOR_REQUESTS,
       entitlementRequests: INITIAL_ENTITLEMENT_REQUESTS,
+      accessRequests: INITIAL_ACCESS_REQUESTS,
+      leaveDelegation: INITIAL_LEAVE_DELEGATION,
       provisioningJobs: INITIAL_PROVISIONING_JOBS,
       importRuns: INITIAL_IMPORT_RUNS,
       emailNotifications: INITIAL_EMAIL_NOTIFICATIONS,
