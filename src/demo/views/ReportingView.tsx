@@ -12,9 +12,11 @@ import {
   History,
   KeyRound,
   Link2,
+  Lock,
   Scissors,
   ShieldAlert,
   ShieldCheck,
+  Trash2,
   UserCheck,
   UserX,
 } from 'lucide-react';
@@ -28,6 +30,7 @@ import { cn } from '@/lib/cn';
 
 type ReportTabId =
   | 'entitlements'
+  | 'empty-entitlements'
   | 'accounts'
   | 'orphaned'
   | 'unapproved'
@@ -41,6 +44,7 @@ const REPORT_TABS: {
   icon: typeof KeyRound;
 }[] = [
   { id: 'entitlements', label: 'Entitlements', icon: KeyRound },
+  { id: 'empty-entitlements', label: 'Empty Entitlements', icon: Trash2 },
   { id: 'accounts', label: 'Accounts', icon: UserCheck },
   { id: 'orphaned', label: 'Orphaned Accounts', icon: UserX },
   { id: 'unapproved', label: 'Not Approved Entitlements', icon: ShieldAlert },
@@ -73,6 +77,7 @@ export function ReportingView() {
   const people = useDemoStore((s) => s.people);
   const nonHumans = useDemoStore((s) => s.nonHumans);
   const entitlements = useDemoStore((s) => s.entitlements);
+  const emptyEntitlements = useDemoStore((s) => s.emptyEntitlements);
   const roles = useDemoStore((s) => s.roles);
   const accounts = useDemoStore((s) => s.accounts);
   const reviews = useDemoStore((s) => s.reviews);
@@ -84,13 +89,29 @@ export function ReportingView() {
 
   const revokeEntitlementDrift = useDemoStore((s) => s.revokeEntitlementDrift);
   const quarantineOrphanAccount = useDemoStore((s) => s.quarantineOrphanAccount);
-  const linkOrphanAccountToOwner = useDemoStore((s) => s.linkOrphanAccountToOwner);
+  const openOrphanAdoptionForAccount = useDemoStore(
+    (s) => s.openOrphanAdoptionForAccount
+  );
+  const triggerEmptyEntitlementDeletion = useDemoStore(
+    (s) => s.triggerEmptyEntitlementDeletion
+  );
+  const bulkDeleteEmptyEntitlements = useDemoStore(
+    (s) => s.bulkDeleteEmptyEntitlements
+  );
+  const approveEmptyEntitlementException = useDemoStore(
+    (s) => s.approveEmptyEntitlementException
+  );
   const remediateNonHumanDrift = useDemoStore((s) => s.remediateNonHumanDrift);
   const setSelectedPersonId = useDemoStore((s) => s.setSelectedPersonId);
   const setActiveSection = useDemoStore((s) => s.setActiveSection);
+  const activeTab = useDemoStore((s) => s.reportingTab);
+  const openReportingTab = useDemoStore((s) => s.openReportingTab);
+  const setActiveTab = (tab: ReportTabId) => openReportingTab(tab);
 
-  const [activeTab, setActiveTab] = useState<ReportTabId>('entitlements');
   const [appFilter, setAppFilter] = useState<string>('All');
+  const [emptyScopeFilter, setEmptyScopeFilter] = useState<
+    'All' | 'Deletable' | 'Protected' | 'Remediated'
+  >('All');
   const [selectedIdentityId, setSelectedIdentityId] = useState<string>('ALL');
   const [changeCategoryFilter, setChangeCategoryFilter] = useState<
     'All' | IdentityHistoryEntry['category']
@@ -290,13 +311,40 @@ export function ReportingView() {
     });
   }, [birthrights, people]);
 
+  // 1b. Imported Target Entitlements Without Members (0-Member Hygiene Report)
+  const emptyEntitlementRows = useMemo(() => {
+    return emptyEntitlements.filter((ent) => {
+      if (appFilter !== 'All' && ent.application !== appFilter) return false;
+      if (
+        emptyScopeFilter === 'Deletable' &&
+        !(ent.deletableInTarget && ent.status === 'Empty (Flagged)')
+      ) {
+        return false;
+      }
+      if (emptyScopeFilter === 'Protected' && ent.deletableInTarget) {
+        return false;
+      }
+      if (
+        emptyScopeFilter === 'Remediated' &&
+        ent.status === 'Empty (Flagged)'
+      ) {
+        return false;
+      }
+      if (!needle) return true;
+      return `${ent.name} ${ent.technicalId} ${ent.application} ${ent.entitlementType} ${ent.importedFrom} ${ent.owner ?? 'Unassigned'} ${ent.status}`
+        .toLowerCase()
+        .includes(needle);
+    });
+  }, [emptyEntitlements, appFilter, emptyScopeFilter, needle]);
+
   const uniqueApps = useMemo(() => {
     const set = new Set<string>();
     accounts.forEach((a) => set.add(a.application));
     entitlements.forEach((e) => set.add(e.application));
+    emptyEntitlements.forEach((e) => set.add(e.application));
     reviews.forEach((r) => set.add(r.application));
     return Array.from(set).sort();
-  }, [accounts, entitlements, reviews]);
+  }, [accounts, entitlements, emptyEntitlements, reviews]);
 
   const activeExportPayload = (): { filename: string; rows: Record<string, unknown>[] } => {
     const dateStamp = new Date().toISOString().slice(0, 10);
@@ -312,6 +360,25 @@ export function ReportingView() {
             sensitivity,
             status,
             approvalState,
+          })),
+        };
+      case 'empty-entitlements':
+        return {
+          filename: `identra-empty-entitlements-zero-members-${dateStamp}`,
+          rows: emptyEntitlementRows.map((ent) => ({
+            entitlement: ent.name,
+            technicalId: ent.technicalId,
+            targetSystem: ent.application,
+            entitlementType: ent.entitlementType,
+            importedFrom: ent.importedFrom,
+            importedAt: ent.importedAt,
+            memberCount: ent.memberCount,
+            daysEmpty: ent.daysEmpty,
+            lastMemberRemovedAt: ent.lastMemberRemovedAt,
+            owner: ent.owner ?? 'Unassigned',
+            deletableInTarget: ent.deletableInTarget ? 'Yes' : 'No (Protected)',
+            status: ent.status,
+            deletionJobCode: ent.deletionJobCode ?? '',
           })),
         };
       case 'accounts':
@@ -391,6 +458,7 @@ export function ReportingView() {
             { metric: 'Total Managed Identities', value: people.length },
             { metric: 'Total Target Accounts', value: accounts.length },
             { metric: 'Orphaned Accounts', value: accounts.filter((a) => a.correlationState === 'Orphaned').length },
+            { metric: 'Empty Target Entitlements (0 Members)', value: emptyEntitlements.filter((e) => e.status === 'Empty (Flagged)').length },
             { metric: 'Not Approved Entitlements', value: unapprovedRows.length },
             { metric: 'Active SoD / Policy Violations', value: policies.reduce((s, p) => s + p.violations, 0) },
             { metric: 'Pending Access Reviews', value: reviews.filter((r) => r.decision === 'Pending').length },
@@ -427,6 +495,12 @@ export function ReportingView() {
   };
 
   const totalOrphans = accounts.filter((a) => a.correlationState === 'Orphaned').length;
+  const totalEmptyFlagged = emptyEntitlements.filter(
+    (e) => e.status === 'Empty (Flagged)'
+  ).length;
+  const totalEmptyDeletable = emptyEntitlements.filter(
+    (e) => e.status === 'Empty (Flagged)' && e.deletableInTarget
+  ).length;
   const totalUnapproved = unapprovedRows.length;
   const totalSoDViolations = policies.reduce((s, p) => s + p.violations, 0);
   const totalChangesLogged = people.reduce(
@@ -475,7 +549,30 @@ export function ReportingView() {
       )}
 
       {/* Executive KPI Summary Bar */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <button
+          type="button"
+          onClick={() => setActiveTab('empty-entitlements')}
+          className="cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-xs transition-all hover:border-amber-200"
+        >
+          <div className="font-mono text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+            Empty Entitlements
+          </div>
+          <div className="mt-1.5 flex items-baseline gap-2">
+            <span
+              className={cn(
+                'font-display text-2xl font-extrabold',
+                totalEmptyFlagged > 0 ? 'text-amber-600' : 'text-emerald-600'
+              )}
+            >
+              {totalEmptyFlagged}
+            </span>
+            <span className="font-mono text-[11px] text-slate-400">
+              {totalEmptyDeletable} deletable
+            </span>
+          </div>
+        </button>
+
         <button
           type="button"
           onClick={() => setActiveTab('orphaned')}
@@ -575,11 +672,13 @@ export function ReportingView() {
             const Icon = tab.icon;
             const active = activeTab === tab.id;
             const badge =
-              tab.id === 'orphaned' && totalOrphans > 0
-                ? totalOrphans
-                : tab.id === 'unapproved' && totalUnapproved > 0
-                  ? totalUnapproved
-                  : null;
+              tab.id === 'empty-entitlements' && totalEmptyFlagged > 0
+                ? totalEmptyFlagged
+                : tab.id === 'orphaned' && totalOrphans > 0
+                  ? totalOrphans
+                  : tab.id === 'unapproved' && totalUnapproved > 0
+                    ? totalUnapproved
+                    : null;
             return (
               <Tabs.Trigger
                 key={tab.id}
@@ -605,6 +704,7 @@ export function ReportingView() {
 
         {/* Shared Target Application Filter (for App-scoped Reports) */}
         {(activeTab === 'entitlements' ||
+          activeTab === 'empty-entitlements' ||
           activeTab === 'accounts' ||
           activeTab === 'orphaned' ||
           activeTab === 'unapproved') && (
@@ -702,6 +802,266 @@ export function ReportingView() {
                 </tbody>
               </table>
             </div>
+          </div>
+        </Tabs.Content>
+
+        {/* 1b. EMPTY TARGET ENTITLEMENTS REPORT (0 MEMBERS) */}
+        <Tabs.Content value="empty-entitlements" className="space-y-3 focus:outline-none">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-xs">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="font-mono text-[10px] font-semibold text-slate-400 uppercase">
+                Filter:
+              </span>
+              {(
+                [
+                  { id: 'All', label: 'All Imported (0 Members)' },
+                  { id: 'Deletable', label: 'Flagged · Target Deletion Applicable' },
+                  { id: 'Protected', label: 'Protected · Exception Only' },
+                  { id: 'Remediated', label: 'Remediated / Queued' },
+                ] as const
+              ).map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setEmptyScopeFilter(opt.id)}
+                  className={cn(
+                    'cursor-pointer rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors',
+                    emptyScopeFilter === opt.id
+                      ? 'border-[#0F172A] bg-[#0F172A] font-semibold text-white'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setActiveSection('governance-assurance')}
+                className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-[11px] font-semibold text-[#0284C7] hover:bg-sky-100"
+              >
+                <ShieldCheck className="h-3.5 w-3.5" />
+                <span>Configure GA-CTRL-07</span>
+              </button>
+              {totalEmptyDeletable > 0 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    bulkDeleteEmptyEntitlements(
+                      emptyEntitlementRows
+                        .filter((e) => e.deletableInTarget && e.status === 'Empty (Flagged)')
+                        .map((e) => e.id),
+                      'immediate'
+                    )
+                  }
+                  className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-rose-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-rose-700"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>
+                    Trigger Deletion Tasks (
+                    {
+                      emptyEntitlementRows.filter(
+                        (e) => e.deletableInTarget && e.status === 'Empty (Flagged)'
+                      ).length
+                    }
+                    )
+                  </span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-3.5">
+              <div>
+                <h2 className="font-heading text-sm font-bold text-[#0F172A]">
+                  Imported Target-System Entitlements Without Members (0 Members)
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Entitlements imported from connected systems carrying zero active assignments. Trigger target deletion tasks where applicable or approve protected exceptions under Governance Assurance (GA-CTRL-07).
+                </p>
+              </div>
+              <span className="rounded-full bg-amber-50 px-2.5 py-0.5 font-mono text-[11px] font-bold text-amber-700">
+                {emptyEntitlementRows.length} entitlements
+              </span>
+            </div>
+
+            {emptyEntitlementRows.length === 0 ? (
+              <div className="flex flex-col items-center justify-center gap-2 p-10 text-center">
+                <CheckCircle2 className="h-8 w-8 text-emerald-500" />
+                <div className="font-heading text-sm font-bold text-[#0F172A]">
+                  No Matching Zero-Member Entitlements
+                </div>
+                <p className="text-xs text-slate-500">
+                  Adjust the filter or run a connector import to evaluate target-system entitlement hygiene.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="border-b border-slate-100 bg-[#F8FAFC] font-mono text-[10px] tracking-wider text-slate-500 uppercase">
+                    <tr>
+                      <th className="px-4 py-3">Imported Entitlement</th>
+                      <th className="px-4 py-3">Target System &amp; Import</th>
+                      <th className="px-4 py-3">Members / Empty Age</th>
+                      <th className="px-4 py-3">Owner &amp; Deletion Eligibility</th>
+                      <th className="px-4 py-3">Status &amp; Target Task</th>
+                      <th className="px-4 py-3 text-right">Remediation</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {emptyEntitlementRows.map((ent) => (
+                      <tr
+                        key={ent.id}
+                        className={cn(
+                          'hover:bg-slate-50/70',
+                          ent.status === 'Empty (Flagged)' && 'bg-amber-50/10'
+                        )}
+                      >
+                        <td className="px-4 py-3.5">
+                          <div className="font-mono font-semibold text-[#0F172A]">
+                            {ent.name}
+                          </div>
+                          <div className="mt-0.5 max-w-xs truncate font-mono text-[10px] text-slate-400">
+                            {ent.technicalId}
+                          </div>
+                          <div className="mt-1 flex items-center gap-1.5">
+                            <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[9px] font-semibold text-slate-600">
+                              {ent.entitlementType}
+                            </span>
+                            <span
+                              className={cn(
+                                'rounded-full px-2 py-0.5 font-mono text-[9px] font-semibold',
+                                ent.sensitivity === 'Critical'
+                                  ? 'bg-rose-50 text-rose-600'
+                                  : ent.sensitivity === 'High'
+                                    ? 'bg-amber-50 text-amber-700'
+                                    : 'bg-slate-100 text-slate-600'
+                              )}
+                            >
+                              {ent.sensitivity}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <div className="font-medium text-slate-800">{ent.application}</div>
+                          <div className="mt-0.5 font-mono text-[10px] text-slate-400">
+                            {ent.importedFrom}
+                          </div>
+                          <div className="font-mono text-[10px] text-slate-400">
+                            Synced {ent.importedAt}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span className="rounded-full bg-rose-50 px-2 py-0.5 font-mono text-[10px] font-bold text-rose-700">
+                            {ent.memberCount} members
+                          </span>
+                          <div className="mt-1 font-mono text-[11px] font-semibold text-slate-700">
+                            {ent.daysEmpty}d empty
+                          </div>
+                          <div className="font-mono text-[10px] text-slate-400">
+                            Last removed {ent.lastMemberRemovedAt}
+                          </div>
+                        </td>
+                        <td className="max-w-xs px-4 py-3.5">
+                          <div className="font-medium text-slate-700">
+                            {ent.owner ?? (
+                              <span className="font-mono text-rose-600">Unassigned</span>
+                            )}
+                          </div>
+                          {ent.deletableInTarget ? (
+                            <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 font-mono text-[9px] font-semibold text-emerald-700">
+                              <Trash2 className="h-2.5 w-2.5" />
+                              <span>Target Deletion Applicable</span>
+                            </span>
+                          ) : (
+                            <div className="mt-1 space-y-0.5">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[9px] font-bold text-slate-700">
+                                <Lock className="h-2.5 w-2.5" />
+                                <span>Protected · Not Deletable</span>
+                              </span>
+                              <div className="text-[10px] text-slate-500">
+                                {ent.nonDeletableReason}
+                              </div>
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span
+                            className={cn(
+                              'rounded-full px-2.5 py-0.5 font-mono text-[10px] font-semibold',
+                              ent.status === 'Deleted in Target'
+                                ? 'bg-emerald-50 text-emerald-700'
+                                : ent.status === 'Deletion Queued'
+                                  ? 'bg-sky-50 text-[#0284C7]'
+                                  : ent.status === 'Exception Approved'
+                                    ? 'bg-indigo-50 text-indigo-700'
+                                    : 'bg-amber-50 text-amber-700'
+                            )}
+                          >
+                            {ent.status}
+                          </span>
+                          {ent.deletionJobCode && (
+                            <div className="mt-1">
+                              <button
+                                type="button"
+                                onClick={() => setActiveSection('provisioning-engine')}
+                                className="inline-flex cursor-pointer items-center gap-1 font-mono text-[10px] font-semibold text-[#0284C7] hover:underline"
+                              >
+                                <span>Task {ent.deletionJobCode}</span>
+                                <ArrowUpRight className="h-3 w-3" />
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3.5 text-right">
+                          {ent.status === 'Empty (Flagged)' ? (
+                            ent.deletableInTarget ? (
+                              <div className="inline-flex flex-wrap justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    triggerEmptyEntitlementDeletion(ent.id, 'immediate')
+                                  }
+                                  className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-rose-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-rose-700"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                  <span>Delete in Target</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    triggerEmptyEntitlementDeletion(ent.id, 'simulation')
+                                  }
+                                  className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-[11px] font-semibold text-[#0284C7] hover:bg-sky-100"
+                                >
+                                  <span>Queue Sim</span>
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => approveEmptyEntitlementException(ent.id)}
+                                className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-100"
+                              >
+                                <ShieldCheck className="h-3 w-3" />
+                                <span>Approve Exception</span>
+                              </button>
+                            )
+                          ) : (
+                            <span className="font-mono text-[10px] text-emerald-600">
+                              Resolved
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </Tabs.Content>
 
@@ -877,11 +1237,11 @@ export function ReportingView() {
                           <div className="inline-flex items-center gap-1.5">
                             <button
                               type="button"
-                              onClick={() => linkOrphanAccountToOwner(acc.id, 'p-priya')}
-                              className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:border-[#0EA5E9] hover:text-[#0284C7]"
+                              onClick={() => openOrphanAdoptionForAccount(acc.id)}
+                              className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1 text-[11px] font-semibold text-[#0284C7] hover:bg-sky-100"
                             >
                               <Link2 className="h-3 w-3" />
-                              <span>Assign Steward</span>
+                              <span>Adopt / Classify</span>
                             </button>
                             <button
                               type="button"

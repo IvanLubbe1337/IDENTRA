@@ -3,6 +3,7 @@ export type DemoSectionId =
   | 'my-tasks'
   | 'people'
   | 'non-human'
+  | 'orphan-adoption'
   | 'applications'
   | 'entitlements'
   | 'roles'
@@ -143,7 +144,19 @@ export interface DemoPerson {
   contextRefIds: string[];
   lastAttestation: string;
   sodAlert?: string;
+  provenance?: IdentityProvenance;
   changeHistory: IdentityHistoryEntry[];
+}
+
+export interface IdentityProvenance {
+  creationMethod: 'Orphaned account adoption' | 'Authoritative HRIS Sync' | 'Contractor Onboarding';
+  creationSource: string;
+  authoritativeSource: string;
+  accountCorrelationSource: string;
+  originalAccountId: string;
+  adoptedBy: string;
+  adoptionDate: string;
+  approvalReference: string;
 }
 
 export interface DemoNonHuman {
@@ -2471,6 +2484,7 @@ export interface DemoTargetAccount {
   daysInactive: number;
   orphanReason?: string;
   riskScore: number;
+  rawAttributes?: Record<string, string | null>;
 }
 
 export const INITIAL_DEMO_ACCOUNTS: DemoTargetAccount[] = [
@@ -2588,6 +2602,54 @@ export const INITIAL_DEMO_ACCOUNTS: DemoTargetAccount[] = [
     riskScore: 95,
   },
   {
+    id: 'acc-jsmith',
+    accountName: 'j.smith',
+    application: 'Active Directory',
+    accountType: 'Human',
+    correlatedIdentity: null,
+    correlationState: 'Orphaned',
+    accountStatus: 'Enabled',
+    privileged: false,
+    lastLogin: 'Today 09:14',
+    daysInactive: 0,
+    orphanReason:
+      'Active Directory account imported from OU=Finance with no matching Workday employeeNumber or manager correlation.',
+    riskScore: 74,
+    rawAttributes: {
+      sAMAccountName: 'j.smith',
+      givenName: 'John',
+      sn: 'Smith',
+      mail: 'john.smith@company.com',
+      department: 'Finance',
+      employeeNumber: null,
+      manager: null,
+    },
+  },
+  {
+    id: 'acc-jdavies-dup',
+    accountName: 'j.davies_legacy',
+    application: 'Active Directory',
+    accountType: 'Human',
+    correlatedIdentity: null,
+    correlationState: 'Orphaned',
+    accountStatus: 'Enabled',
+    privileged: false,
+    lastLogin: 'Yesterday 16:40',
+    daysInactive: 1,
+    orphanReason:
+      'Uncorrelated regional AD account — matches existing identity attributes for John Davies (potential duplicate).',
+    riskScore: 68,
+    rawAttributes: {
+      sAMAccountName: 'j.davies_legacy',
+      givenName: 'John',
+      sn: 'Davies',
+      mail: 'john.davies@identra-corp.io',
+      department: 'Global Revenue & Enterprise Sales',
+      employeeNumber: 'EMP-10394',
+      manager: 'Marcus Bell',
+    },
+  },
+  {
     id: 'acc-9',
     accountName: 'adm_jhenderson',
     application: 'Active Directory',
@@ -2600,6 +2662,15 @@ export const INITIAL_DEMO_ACCOUNTS: DemoTargetAccount[] = [
     daysInactive: 118,
     orphanReason: 'Unmatched OU=Contractors account with no Workday employeeNumber (flagged in IMP-4104).',
     riskScore: 91,
+    rawAttributes: {
+      sAMAccountName: 'adm_jhenderson',
+      givenName: 'James',
+      sn: 'Henderson',
+      mail: 'james.henderson@ext-infra.co.za',
+      department: 'External Assurance & Contractors',
+      employeeNumber: null,
+      manager: null,
+    },
   },
   {
     id: 'acc-10',
@@ -2614,6 +2685,15 @@ export const INITIAL_DEMO_ACCOUNTS: DemoTargetAccount[] = [
     daysInactive: 64,
     orphanReason: 'Legacy vendor account without B2B sponsor or HRIS correlation record (IMP-4104).',
     riskScore: 76,
+    rawAttributes: {
+      sAMAccountName: 'ext_kpatel_tmp',
+      givenName: 'Kiran',
+      sn: 'Patel',
+      mail: 'kiran.patel@vanguard-ext.co.za',
+      department: 'External Assurance & Contractors',
+      employeeNumber: null,
+      manager: null,
+    },
   },
   {
     id: 'acc-11',
@@ -2628,6 +2708,15 @@ export const INITIAL_DEMO_ACCOUNTS: DemoTargetAccount[] = [
     daysInactive: 42,
     orphanReason: 'Ownerless SAP batch user holding FI_POSTING privilege; original owner departed Q2.',
     riskScore: 88,
+    rawAttributes: {
+      BNAME: 'SAP_BATCH_LEGACY04',
+      NAME_FIRST: 'SAP Batch',
+      NAME_LAST: 'Posting Engine',
+      SMTP_ADDR: 'sap-batch-fin@identra-corp.io',
+      DEPARTMENT: 'Corporate Finance & Treasury',
+      PERNR: null,
+      KOSTL: 'CC-4100-FIN',
+    },
   },
   {
     id: 'acc-12',
@@ -2642,6 +2731,14 @@ export const INITIAL_DEMO_ACCOUNTS: DemoTargetAccount[] = [
     daysInactive: 0,
     orphanReason: 'Unassigned non-human API token with wildcard S3 + Secrets Read; unrotated for 194 days.',
     riskScore: 92,
+    rawAttributes: {
+      iamUserName: 'api.legacy-billing-sync',
+      'tag:FirstName': null,
+      'tag:LastName': null,
+      'tag:Email': null,
+      'tag:Owner': null,
+      'tag:Scope': 'Wildcard S3 + Secrets Read',
+    },
   },
   {
     id: 'acc-13',
@@ -2656,6 +2753,13 @@ export const INITIAL_DEMO_ACCOUNTS: DemoTargetAccount[] = [
     daysInactive: 87,
     orphanReason: 'Decommissioned BI connector account never linked to an accountable steward.',
     riskScore: 72,
+    rawAttributes: {
+      LOGIN_NAME: 'sf_bi_extract_old',
+      FIRST_NAME: 'Snowflake BI',
+      LAST_NAME: 'Extract Connector',
+      EMAIL: 'bi-ops@identra-corp.io',
+      COMMENT_OWNER: null,
+    },
   },
   {
     id: 'acc-14',
@@ -3427,6 +3531,16 @@ export interface GovernanceControlViolation {
   detectedAt: string;
   suggestedFix: string;
   resolved: boolean;
+  /** Optional link to an imported zero-member entitlement for target-system deletion remediation */
+  emptyEntitlementId?: string;
+  targetSystem?: DemoProvisioningJob['application'];
+  technicalId?: string;
+  daysEmpty?: number;
+  deletableInTarget?: boolean;
+  nonDeletableReason?: string;
+  deletionJobId?: string;
+  deletionJobCode?: string;
+  remediationOutcome?: string;
 }
 
 export interface DemoGovernanceControl {
@@ -3685,6 +3799,122 @@ export const INITIAL_GOVERNANCE_CONTROLS: DemoGovernanceControl[] = [
         detectedAt: '2026-11-24 06:00',
         suggestedFix: 'Trigger immediate Access Review (WF-REV-DUAL-02) & convert to JIT',
         resolved: false,
+      },
+    ],
+  },
+  {
+    id: 'ga-empty-entitlements',
+    code: 'GA-CTRL-07',
+    name: 'Empty Target Entitlements',
+    description:
+      'Entitlements imported from connected target systems with zero active members past the 30-day retention threshold must be decommissioned via a target deletion task or hold an approved exception.',
+    domain: 'Access Hygiene',
+    severity: 'Medium',
+    preventativeEnabled: true,
+    detectiveEnabled: true,
+    totalEvaluated: 12480,
+    evaluatedUnit: 'imported entitlements',
+    lastScanAt: '2m ago',
+    preventativeTestExample: {
+      attemptedAction:
+        'Import & publish unmanaged AD group "SG-Temp-FY25-Migration" (0 members) into Access Marketplace or remove last remaining member without lifecycle decommission check',
+      blockedMessage:
+        'BLOCKED BY GA-CTRL-07 (Preventative): Zero-member entitlement cannot be published to catalog or left orphaned after last-member removal — assign initial members, attach a retention exception, or trigger a Target System Deletion Task.',
+      allowedMessage:
+        'ALLOWED (Preventative Off): Zero-member entitlement accepted into catalog — Detective scan will flag it for target-system deletion after the 30-day empty threshold.',
+    },
+    violations: [
+      {
+        id: 'gv-emp-1',
+        objectName: 'SG-Legacy-Q3-Audit-Temp',
+        objectType: 'Entitlement',
+        detail:
+          'Imported from Active Directory with 0 members for 142 days (last member removed 2026-07-06). No active birthright or role reference.',
+        detectedAt: '2026-11-25 06:15',
+        suggestedFix: 'Trigger Active Directory LDAP group deletion task',
+        resolved: false,
+        emptyEntitlementId: 'emp-ent-1',
+        targetSystem: 'Active Directory',
+        technicalId: 'CN=SG-Legacy-Q3-Audit-Temp,OU=LegacyGroups,DC=corp,DC=identra,DC=net',
+        daysEmpty: 142,
+        deletableInTarget: true,
+      },
+      {
+        id: 'gv-emp-2',
+        objectName: 'SAP:Z_FI_LEGACY_MIGRATION_2024',
+        objectType: 'Entitlement',
+        detail:
+          'Imported from SAP S/4HANA Finance with 0 assigned users for 218 days following ERP chart-of-accounts cutover.',
+        detectedAt: '2026-11-25 06:15',
+        suggestedFix: 'Trigger SAP BAPI / SCIM role deletion task',
+        resolved: false,
+        emptyEntitlementId: 'emp-ent-2',
+        targetSystem: 'SAP S/4HANA Finance',
+        technicalId: 'AGR_NAME=Z_FI_LEGACY_MIGRATION_2024',
+        daysEmpty: 218,
+        deletableInTarget: true,
+      },
+      {
+        id: 'gv-emp-3',
+        objectName: 'AWS-Sandbox-Legacy-ReadOnly',
+        objectType: 'Entitlement',
+        detail:
+          'Imported from AWS Prod Vault (IAM Identity Center) with 0 principals bound for 95 days; legacy sandbox account retired.',
+        detectedAt: '2026-11-25 06:15',
+        suggestedFix: 'Trigger AWS IAM Permission Set deletion task',
+        resolved: false,
+        emptyEntitlementId: 'emp-ent-3',
+        targetSystem: 'AWS Prod Vault',
+        technicalId: 'arn:aws:iam::904128301:policy/AWS-Sandbox-Legacy-ReadOnly',
+        daysEmpty: 95,
+        deletableInTarget: true,
+      },
+      {
+        id: 'gv-emp-4',
+        objectName: 'SF_ROLE_TEMP_MIGRATION_Q1',
+        objectType: 'Entitlement',
+        detail:
+          'Imported from Snowflake PII Lake with 0 granted users or parent roles for 64 days since Q1 warehouse backfill completed.',
+        detectedAt: '2026-11-25 06:15',
+        suggestedFix: 'Trigger Snowflake DROP ROLE deletion task',
+        resolved: false,
+        emptyEntitlementId: 'emp-ent-4',
+        targetSystem: 'Snowflake PII Lake',
+        technicalId: 'SNOWFLAKE.ROLE.SF_ROLE_TEMP_MIGRATION_Q1',
+        daysEmpty: 64,
+        deletableInTarget: true,
+      },
+      {
+        id: 'gv-emp-5',
+        objectName: 'ENTRA-GRP-DECOMM-SHAREPOINT',
+        objectType: 'Entitlement',
+        detail:
+          'Imported from Microsoft Entra ID with 0 members for 187 days; backing SharePoint site collection archived.',
+        detectedAt: '2026-11-25 06:15',
+        suggestedFix: 'Trigger Microsoft Graph DELETE /groups/{id} task',
+        resolved: false,
+        emptyEntitlementId: 'emp-ent-5',
+        targetSystem: 'Microsoft Entra ID',
+        technicalId: 'aad-grp-9f41b2c8-decomm-spo-01',
+        daysEmpty: 187,
+        deletableInTarget: true,
+      },
+      {
+        id: 'gv-emp-6',
+        objectName: 'SG-BuiltIn-Emergency-BreakGlass',
+        objectType: 'Entitlement',
+        detail:
+          'Imported from Active Directory with 0 standing members (410 days empty). Marked as Protected Break-Glass object — target deletion disabled.',
+        detectedAt: '2026-11-25 06:15',
+        suggestedFix: 'Approve Standing Governance Exception (Protected Break-Glass)',
+        resolved: false,
+        emptyEntitlementId: 'emp-ent-6',
+        targetSystem: 'Active Directory',
+        technicalId: 'CN=SG-BuiltIn-Emergency-BreakGlass,OU=Tier0,DC=corp,DC=identra,DC=net',
+        daysEmpty: 410,
+        deletableInTarget: false,
+        nonDeletableReason:
+          'Protected Tier-0 Break-Glass group (zero standing members by design). Target-system deletion is blocked; approve a Governance Exception instead.',
       },
     ],
   },
@@ -5020,3 +5250,328 @@ export const INITIAL_LEAVE_DELEGATION: LeaveDelegationConfig = {
   delegateOnboarding: true,
   updatedAt: 'Not active',
 };
+
+/* -------------------------------------------------------------------------- */
+/* Orphaned Account Adoption (Mappings, Policies, Provenance & Rollback)      */
+/* -------------------------------------------------------------------------- */
+
+export type AdoptionActionKind =
+  | 'Promote to Identity'
+  | 'Correlate to Existing'
+  | 'Classify as Non-Human';
+
+export type AdoptionHumanClassification =
+  | 'Employee'
+  | 'Contractor'
+  | 'External Consultant';
+
+export type AdoptionNhiClassification =
+  | 'Service Account'
+  | 'Application Account'
+  | 'Shared Mailbox'
+  | 'Technical Integration'
+  | 'API Token';
+
+export interface AdoptionAttributeMappingRule {
+  id: string;
+  sourceAttribute: string;
+  identityAttribute:
+    | 'accountRef'
+    | 'firstName'
+    | 'lastName'
+    | 'email'
+    | 'department'
+    | 'employeeNumber'
+    | 'manager';
+  identityLabel: string;
+  requiredForPromotion: boolean;
+}
+
+export interface SystemAdoptionMapping {
+  systemName: string;
+  rules: AdoptionAttributeMappingRule[];
+}
+
+export interface AdoptionPolicyConfig {
+  mode:
+    | 'Immediate (Permitted)'
+    | 'Require Approval (Manager / System Owner)'
+    | 'Restricted (Governance Admins Only)';
+  duplicateRules: {
+    matchEmail: boolean;
+    matchEmployeeNumber: boolean;
+    matchUsername: boolean;
+    matchFullName: boolean;
+  };
+  requireContractorExpiry: boolean;
+  requireOwnershipValidation: boolean;
+  defaultAuthoritativeSource:
+    | 'Manual / Pending HRIS Link'
+    | 'Workday HRIS Core (Reconcile Next Sync)'
+    | 'B2B Partner Lifecycle Portal'
+    | 'Active Directory (Temporary)';
+}
+
+export interface DemoAdoptionRecord {
+  id: string;
+  approvalReference: string;
+  actionKind: AdoptionActionKind;
+  classification: string;
+  originalAccountId: string;
+  originalAccountName: string;
+  originalSource: string;
+  targetIdentityName: string;
+  createdPersonId?: string;
+  createdNonHumanId?: string;
+  correlatedPersonId?: string;
+  adoptedBy: string;
+  adoptionDate: string;
+  creationSource: string;
+  authoritativeSource: string;
+  accountCorrelationSource: string;
+  expiryDate?: string | null;
+  status: 'Completed' | 'Pending Approval' | 'Rolled Back';
+  pendingPayload?: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    department: string;
+    employeeNumber: string;
+    manager: string;
+    managerRefId: string;
+    classification: AdoptionHumanClassification;
+    expiryDate: string | null;
+    authoritativeSource: string;
+  };
+}
+
+export const INITIAL_SYSTEM_ADOPTION_MAPPINGS: SystemAdoptionMapping[] = [
+  {
+    systemName: 'Active Directory',
+    rules: [
+      { id: 'ad-1', sourceAttribute: 'sAMAccountName', identityAttribute: 'accountRef', identityLabel: 'Account reference', requiredForPromotion: false },
+      { id: 'ad-2', sourceAttribute: 'givenName', identityAttribute: 'firstName', identityLabel: 'First name', requiredForPromotion: true },
+      { id: 'ad-3', sourceAttribute: 'sn', identityAttribute: 'lastName', identityLabel: 'Last name', requiredForPromotion: true },
+      { id: 'ad-4', sourceAttribute: 'mail', identityAttribute: 'email', identityLabel: 'Email', requiredForPromotion: true },
+      { id: 'ad-5', sourceAttribute: 'department', identityAttribute: 'department', identityLabel: 'Department', requiredForPromotion: false },
+      { id: 'ad-6', sourceAttribute: 'employeeNumber', identityAttribute: 'employeeNumber', identityLabel: 'Employee number', requiredForPromotion: true },
+      { id: 'ad-7', sourceAttribute: 'manager', identityAttribute: 'manager', identityLabel: 'Manager', requiredForPromotion: true },
+    ],
+  },
+  {
+    systemName: 'SAP S/4HANA Finance',
+    rules: [
+      { id: 'sap-1', sourceAttribute: 'BNAME', identityAttribute: 'accountRef', identityLabel: 'Account reference', requiredForPromotion: false },
+      { id: 'sap-2', sourceAttribute: 'NAME_FIRST', identityAttribute: 'firstName', identityLabel: 'First name', requiredForPromotion: true },
+      { id: 'sap-3', sourceAttribute: 'NAME_LAST', identityAttribute: 'lastName', identityLabel: 'Last name', requiredForPromotion: true },
+      { id: 'sap-4', sourceAttribute: 'SMTP_ADDR', identityAttribute: 'email', identityLabel: 'Email', requiredForPromotion: true },
+      { id: 'sap-5', sourceAttribute: 'DEPARTMENT', identityAttribute: 'department', identityLabel: 'Department', requiredForPromotion: false },
+      { id: 'sap-6', sourceAttribute: 'PERNR', identityAttribute: 'employeeNumber', identityLabel: 'Employee number', requiredForPromotion: true },
+    ],
+  },
+  {
+    systemName: 'AWS Prod Vault',
+    rules: [
+      { id: 'aws-1', sourceAttribute: 'iamUserName', identityAttribute: 'accountRef', identityLabel: 'Account reference', requiredForPromotion: false },
+      { id: 'aws-2', sourceAttribute: 'tag:FirstName', identityAttribute: 'firstName', identityLabel: 'First name', requiredForPromotion: true },
+      { id: 'aws-3', sourceAttribute: 'tag:LastName', identityAttribute: 'lastName', identityLabel: 'Last name', requiredForPromotion: true },
+      { id: 'aws-4', sourceAttribute: 'tag:Email', identityAttribute: 'email', identityLabel: 'Email', requiredForPromotion: true },
+      { id: 'aws-5', sourceAttribute: 'tag:Owner', identityAttribute: 'manager', identityLabel: 'Manager / Owner', requiredForPromotion: true },
+    ],
+  },
+  {
+    systemName: 'Snowflake PII Lake',
+    rules: [
+      { id: 'sf-1', sourceAttribute: 'LOGIN_NAME', identityAttribute: 'accountRef', identityLabel: 'Account reference', requiredForPromotion: false },
+      { id: 'sf-2', sourceAttribute: 'FIRST_NAME', identityAttribute: 'firstName', identityLabel: 'First name', requiredForPromotion: true },
+      { id: 'sf-3', sourceAttribute: 'LAST_NAME', identityAttribute: 'lastName', identityLabel: 'Last name', requiredForPromotion: true },
+      { id: 'sf-4', sourceAttribute: 'EMAIL', identityAttribute: 'email', identityLabel: 'Email', requiredForPromotion: true },
+      { id: 'sf-5', sourceAttribute: 'COMMENT_OWNER', identityAttribute: 'manager', identityLabel: 'Manager / Steward', requiredForPromotion: true },
+    ],
+  },
+];
+
+export const INITIAL_ADOPTION_POLICY: AdoptionPolicyConfig = {
+  mode: 'Immediate (Permitted)',
+  duplicateRules: {
+    matchEmail: true,
+    matchEmployeeNumber: true,
+    matchUsername: true,
+    matchFullName: true,
+  },
+  requireContractorExpiry: true,
+  requireOwnershipValidation: true,
+  defaultAuthoritativeSource: 'Manual / Pending HRIS Link',
+};
+
+export const INITIAL_ADOPTION_RECORDS: DemoAdoptionRecord[] = [
+  {
+    id: 'adp-hist-1',
+    approvalReference: 'APR-10241',
+    actionKind: 'Classify as Non-Human',
+    classification: 'Service Account',
+    originalAccountId: 'acc-15',
+    originalAccountName: 'svc.finance-ledger-etl',
+    originalSource: 'SAP S/4HANA Finance',
+    targetIdentityName: 'svc.finance-ledger-etl (Owner: Lucas Meyer)',
+    createdNonHumanId: 'nh-etl',
+    adoptedBy: 'Ivan Lubbe',
+    adoptionDate: '24/11/2026',
+    creationSource: 'Orphaned account adoption · SAP S/4HANA Finance',
+    authoritativeSource: 'IDENTRA NHI Registry',
+    accountCorrelationSource: 'SAP S/4HANA Finance',
+    status: 'Completed',
+  },
+];
+
+/* -------------------------------------------------------------------------- */
+/* Imported Target-System Entitlements Without Members (Zero-Member Hygiene)  */
+/* -------------------------------------------------------------------------- */
+
+export type EmptyEntitlementStatus =
+  | 'Empty (Flagged)'
+  | 'Deletion Queued'
+  | 'Deleted in Target'
+  | 'Exception Approved';
+
+export interface DemoEmptyEntitlement {
+  id: string;
+  name: string;
+  technicalId: string;
+  application: DemoProvisioningJob['application'];
+  entitlementType:
+    | 'AD Security Group'
+    | 'SAP Role'
+    | 'AWS IAM Policy'
+    | 'Snowflake Role'
+    | 'Entra ID Security Group'
+    | 'Okta App Group';
+  connectorAction: string;
+  importedFrom: string;
+  importedAt: string;
+  memberCount: number;
+  daysEmpty: number;
+  lastMemberRemovedAt: string;
+  owner: string | null;
+  sensitivity: 'Critical' | 'High' | 'Standard';
+  deletableInTarget: boolean;
+  nonDeletableReason?: string;
+  status: EmptyEntitlementStatus;
+  governanceViolationId: string;
+  deletionJobId?: string;
+  deletionJobCode?: string;
+  exceptionReason?: string;
+}
+
+export const INITIAL_EMPTY_ENTITLEMENTS: DemoEmptyEntitlement[] = [
+  {
+    id: 'emp-ent-1',
+    name: 'SG-Legacy-Q3-Audit-Temp',
+    technicalId: 'CN=SG-Legacy-Q3-Audit-Temp,OU=LegacyGroups,DC=corp,DC=identra,DC=net',
+    application: 'Active Directory',
+    entitlementType: 'AD Security Group',
+    connectorAction: 'LDAP DELETE objectClass=group',
+    importedFrom: 'Active Directory Delta Import (IMP-8841)',
+    importedAt: '2026-11-25 06:02',
+    memberCount: 0,
+    daysEmpty: 142,
+    lastMemberRemovedAt: '2026-07-06',
+    owner: 'Claire Vance',
+    sensitivity: 'Standard',
+    deletableInTarget: true,
+    status: 'Empty (Flagged)',
+    governanceViolationId: 'gv-emp-1',
+  },
+  {
+    id: 'emp-ent-2',
+    name: 'SAP:Z_FI_LEGACY_MIGRATION_2024',
+    technicalId: 'AGR_NAME=Z_FI_LEGACY_MIGRATION_2024',
+    application: 'SAP S/4HANA Finance',
+    entitlementType: 'SAP Role',
+    connectorAction: 'SAP BAPI PRGN_ROLE_DELETE',
+    importedFrom: 'SAP BAPI / SCIM Full Recon (IMP-8837)',
+    importedAt: '2026-11-25 05:40',
+    memberCount: 0,
+    daysEmpty: 218,
+    lastMemberRemovedAt: '2026-04-21',
+    owner: 'David Chen',
+    sensitivity: 'High',
+    deletableInTarget: true,
+    status: 'Empty (Flagged)',
+    governanceViolationId: 'gv-emp-2',
+  },
+  {
+    id: 'emp-ent-3',
+    name: 'AWS-Sandbox-Legacy-ReadOnly',
+    technicalId: 'arn:aws:iam::904128301:policy/AWS-Sandbox-Legacy-ReadOnly',
+    application: 'AWS Prod Vault',
+    entitlementType: 'AWS IAM Policy',
+    connectorAction: 'AWS IAM DeletePolicy / DeletePermissionSet',
+    importedFrom: 'AWS IAM Identity Center Recon (IMP-8835)',
+    importedAt: '2026-11-25 05:15',
+    memberCount: 0,
+    daysEmpty: 95,
+    lastMemberRemovedAt: '2026-08-22',
+    owner: 'Priya Nair',
+    sensitivity: 'Standard',
+    deletableInTarget: true,
+    status: 'Empty (Flagged)',
+    governanceViolationId: 'gv-emp-3',
+  },
+  {
+    id: 'emp-ent-4',
+    name: 'SF_ROLE_TEMP_MIGRATION_Q1',
+    technicalId: 'SNOWFLAKE.ROLE.SF_ROLE_TEMP_MIGRATION_Q1',
+    application: 'Snowflake PII Lake',
+    entitlementType: 'Snowflake Role',
+    connectorAction: 'SQL DROP ROLE IF EXISTS SF_ROLE_TEMP_MIGRATION_Q1',
+    importedFrom: 'Snowflake Governance API Sync (IMP-8833)',
+    importedAt: '2026-11-25 04:50',
+    memberCount: 0,
+    daysEmpty: 64,
+    lastMemberRemovedAt: '2026-09-22',
+    owner: 'Lucas Meyer',
+    sensitivity: 'High',
+    deletableInTarget: true,
+    status: 'Empty (Flagged)',
+    governanceViolationId: 'gv-emp-4',
+  },
+  {
+    id: 'emp-ent-5',
+    name: 'ENTRA-GRP-DECOMM-SHAREPOINT',
+    technicalId: 'aad-grp-9f41b2c8-decomm-spo-01',
+    application: 'Microsoft Entra ID',
+    entitlementType: 'Entra ID Security Group',
+    connectorAction: 'Microsoft Graph DELETE /v1.0/groups/{id}',
+    importedFrom: 'Microsoft Entra ID Scheduled Delta (IMP-8830)',
+    importedAt: '2026-11-25 04:12',
+    memberCount: 0,
+    daysEmpty: 187,
+    lastMemberRemovedAt: '2026-05-22',
+    owner: null,
+    sensitivity: 'Standard',
+    deletableInTarget: true,
+    status: 'Empty (Flagged)',
+    governanceViolationId: 'gv-emp-5',
+  },
+  {
+    id: 'emp-ent-6',
+    name: 'SG-BuiltIn-Emergency-BreakGlass',
+    technicalId: 'CN=SG-BuiltIn-Emergency-BreakGlass,OU=Tier0,DC=corp,DC=identra,DC=net',
+    application: 'Active Directory',
+    entitlementType: 'AD Security Group',
+    connectorAction: 'PROTECTED — Target Deletion Disabled',
+    importedFrom: 'Active Directory Delta Import (IMP-8841)',
+    importedAt: '2026-11-25 06:02',
+    memberCount: 0,
+    daysEmpty: 410,
+    lastMemberRemovedAt: '2025-10-11',
+    owner: 'Security Ops',
+    sensitivity: 'Critical',
+    deletableInTarget: false,
+    nonDeletableReason:
+      'Protected Tier-0 Break-Glass group (0 standing members by design). Target-system deletion is not applicable; approve a Governance Exception.',
+    status: 'Empty (Flagged)',
+    governanceViolationId: 'gv-emp-6',
+  },
+];

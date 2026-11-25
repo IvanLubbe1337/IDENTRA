@@ -2,8 +2,10 @@ import { useMemo, useState } from 'react';
 import {
   AlertTriangle,
   ArrowUpRight,
+  BarChart3,
   CheckCircle2,
   FlaskConical,
+  Lock,
   Plus,
   Radar,
   RefreshCw,
@@ -11,6 +13,7 @@ import {
   ShieldCheck,
   ShieldOff,
   Sparkles,
+  Trash2,
   X,
 } from 'lucide-react';
 import type {
@@ -48,15 +51,29 @@ export function GovernanceAssuranceView() {
   const remediateAllControlViolations = useDemoStore(
     (s) => s.remediateAllControlViolations
   );
+  const triggerEmptyEntitlementDeletion = useDemoStore(
+    (s) => s.triggerEmptyEntitlementDeletion
+  );
+  const bulkDeleteEmptyEntitlements = useDemoStore(
+    (s) => s.bulkDeleteEmptyEntitlements
+  );
+  const approveEmptyEntitlementException = useDemoStore(
+    (s) => s.approveEmptyEntitlementException
+  );
   const runGovernanceDetectiveScan = useDemoStore(
     (s) => s.runGovernanceDetectiveScan
   );
   const addGovernanceControl = useDemoStore((s) => s.addGovernanceControl);
+  const setActiveSection = useDemoStore((s) => s.setActiveSection);
+  const openReportingTab = useDemoStore((s) => s.openReportingTab);
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
   const [enforcementFilter, setEnforcementFilter] =
     useState<EnforcementFilter>('All');
   const [inspectControlId, setInspectControlId] = useState<string | null>(null);
+  const [deletionExecutionMode, setDeletionExecutionMode] = useState<
+    'immediate' | 'simulation'
+  >('immediate');
   const [builderOpen, setBuilderOpen] = useState(false);
 
   // Live preventative test banner state
@@ -542,6 +559,17 @@ export function GovernanceAssuranceView() {
                 </span>
 
                 <div className="flex items-center gap-1.5">
+                  {ctrl.id === 'ga-empty-entitlements' && (
+                    <button
+                      type="button"
+                      onClick={() => openReportingTab('empty-entitlements')}
+                      className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 hover:border-[#0EA5E9] hover:text-[#0284C7]"
+                    >
+                      <BarChart3 className="h-3 w-3 text-[#0EA5E9]" />
+                      <span>Empty Report</span>
+                    </button>
+                  )}
+
                   <button
                     type="button"
                     onClick={() => runPreventativeGateTest(ctrl)}
@@ -655,22 +683,116 @@ export function GovernanceAssuranceView() {
                     </div>
                   </div>
 
+                  {/* Target System Deletion Task Mode (for Empty Target Entitlements Control) */}
+                  {inspectedControl.id === 'ga-empty-entitlements' && (
+                    <div className="rounded-xl border border-sky-200/80 bg-sky-50/40 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <div className="font-mono text-[10px] font-bold text-[#0284C7] uppercase">
+                            Target-System Deletion Remediation Mode
+                          </div>
+                          <div className="mt-0.5 text-[11px] text-slate-600">
+                            Choose whether deletion tasks execute directly on connected target systems or queue in Provisioning Engine Simulation Mode.
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setInspectControlId(null);
+                            openReportingTab('empty-entitlements');
+                          }}
+                          className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-sky-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-[#0284C7] hover:bg-sky-50"
+                        >
+                          <BarChart3 className="h-3 w-3" />
+                          <span>View Full Report</span>
+                        </button>
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDeletionExecutionMode('immediate')}
+                          className={cn(
+                            'cursor-pointer rounded-lg border px-3 py-2 text-left text-[11px] font-semibold transition-colors',
+                            deletionExecutionMode === 'immediate'
+                              ? 'border-rose-300 bg-rose-50 text-rose-800'
+                              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                          )}
+                        >
+                          <div>Execute Target Delete Now</div>
+                          <div className="mt-0.5 font-normal text-[10px] opacity-80">
+                            Dispatches connector DELETE job immediately
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeletionExecutionMode('simulation')}
+                          className={cn(
+                            'cursor-pointer rounded-lg border px-3 py-2 text-left text-[11px] font-semibold transition-colors',
+                            deletionExecutionMode === 'simulation'
+                              ? 'border-[#0EA5E9] bg-sky-100/70 text-[#0284C7]'
+                              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                          )}
+                        >
+                          <div>Queue in Simulation Mode</div>
+                          <div className="mt-0.5 font-normal text-[10px] opacity-80">
+                            Stage payload in Provisioning Engine for review
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Detective Findings & Remediation Queue */}
                   <div>
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="font-mono text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
                         Detective Scan Findings ({openViolationsFor(inspectedControl).length} Open)
                       </span>
-                      {openViolationsFor(inspectedControl).length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => remediateAllControlViolations(inspectedControl.id)}
-                          className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-[#0EA5E9] px-3 py-1 text-[11px] font-semibold text-white hover:bg-[#0284C7]"
-                        >
-                          <Sparkles className="h-3 w-3" />
-                          <span>Auto-Remediate All</span>
-                        </button>
-                      )}
+                      {openViolationsFor(inspectedControl).length > 0 &&
+                        (inspectedControl.id === 'ga-empty-entitlements' ? (
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {openViolationsFor(inspectedControl).some(
+                              (v) => v.emptyEntitlementId && v.deletableInTarget
+                            ) && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  bulkDeleteEmptyEntitlements(
+                                    openViolationsFor(inspectedControl)
+                                      .filter((v) => v.emptyEntitlementId && v.deletableInTarget)
+                                      .map((v) => v.emptyEntitlementId as string),
+                                    deletionExecutionMode
+                                  )
+                                }
+                                className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-rose-600 px-3 py-1 text-[11px] font-semibold text-white hover:bg-rose-700"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                                <span>
+                                  {deletionExecutionMode === 'simulation'
+                                    ? 'Queue Deletion Tasks'
+                                    : 'Trigger Deletion Tasks'}{' '}
+                                  (
+                                  {
+                                    openViolationsFor(inspectedControl).filter(
+                                      (v) => v.emptyEntitlementId && v.deletableInTarget
+                                    ).length
+                                  }{' '}
+                                  Applicable)
+                                </span>
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => remediateAllControlViolations(inspectedControl.id)}
+                            className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-[#0EA5E9] px-3 py-1 text-[11px] font-semibold text-white hover:bg-[#0284C7]"
+                          >
+                            <Sparkles className="h-3 w-3" />
+                            <span>Auto-Remediate All</span>
+                          </button>
+                        ))}
                     </div>
 
                     {!inspectedControl.detectiveEnabled ? (
@@ -680,8 +802,7 @@ export function GovernanceAssuranceView() {
                           Detective scanning is paused for this control. Enable <strong>Detective</strong> above to continuously flag existing data violations.
                         </span>
                       </div>
-                    ) : inspectedControl.violations.length === 0 ||
-                      openViolationsFor(inspectedControl).length === 0 ? (
+                    ) : inspectedControl.violations.length === 0 ? (
                       <div className="mt-3 flex flex-col items-center justify-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50/50 p-8 text-center">
                         <CheckCircle2 className="h-7 w-7 text-emerald-600" />
                         <div className="font-heading text-sm font-bold text-[#0F172A]">
@@ -694,6 +815,14 @@ export function GovernanceAssuranceView() {
                       </div>
                     ) : (
                       <div className="mt-3 space-y-2.5">
+                        {openViolationsFor(inspectedControl).length === 0 && (
+                          <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 text-emerald-900">
+                            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                            <span className="font-semibold">
+                              All violations under {inspectedControl.code} have been remediated — control is now Compliant.
+                            </span>
+                          </div>
+                        )}
                         {inspectedControl.violations.map((v) => (
                           <div
                             key={v.id}
@@ -705,22 +834,62 @@ export function GovernanceAssuranceView() {
                             )}
                           >
                             <div className="flex items-start justify-between gap-3">
-                              <div>
+                              <div className="min-w-0 flex-1">
                                 <div className="flex flex-wrap items-center gap-1.5">
                                   <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[9px] font-bold text-slate-600 uppercase">
                                     {v.objectType}
                                   </span>
+                                  {v.targetSystem && (
+                                    <span className="rounded bg-sky-50 px-1.5 py-0.5 font-mono text-[9px] font-semibold text-[#0284C7]">
+                                      {v.targetSystem}
+                                    </span>
+                                  )}
+                                  {v.emptyEntitlementId && v.deletableInTarget === false && (
+                                    <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[9px] font-bold text-slate-700">
+                                      <Lock className="h-2.5 w-2.5" />
+                                      <span>Deletion Not Applicable</span>
+                                    </span>
+                                  )}
                                   <span className="font-heading text-sm font-bold text-[#0F172A]">
                                     {v.objectName}
                                   </span>
                                 </div>
+                                {v.technicalId && (
+                                  <div className="mt-0.5 truncate font-mono text-[10px] text-slate-400">
+                                    {v.technicalId}
+                                  </div>
+                                )}
                                 <p className="mt-1 text-slate-600">{v.detail}</p>
                                 <div className="mt-1.5 font-mono text-[10px] text-slate-400">
-                                  Detected: {v.detectedAt} · Suggested Fix:{' '}
+                                  Detected: {v.detectedAt}
+                                  {v.daysEmpty ? ` · ${v.daysEmpty}d with 0 members` : ''} · Suggested Fix:{' '}
                                   <span className="font-semibold text-slate-700">
                                     {v.suggestedFix}
                                   </span>
                                 </div>
+                                {v.nonDeletableReason && !v.resolved && (
+                                  <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50/70 px-2.5 py-1.5 text-[11px] text-amber-900">
+                                    {v.nonDeletableReason}
+                                  </div>
+                                )}
+                                {v.remediationOutcome && (
+                                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-medium text-emerald-800">
+                                    <span>{v.remediationOutcome}</span>
+                                    {v.deletionJobCode && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setInspectControlId(null);
+                                          setActiveSection('provisioning-engine');
+                                        }}
+                                        className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-sky-200 bg-white px-2 py-0.5 font-mono text-[10px] font-bold text-[#0284C7] hover:bg-sky-50"
+                                      >
+                                        <span>Inspect {v.deletionJobCode}</span>
+                                        <ArrowUpRight className="h-3 w-3" />
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
                               </div>
 
                               {v.resolved ? (
@@ -728,6 +897,50 @@ export function GovernanceAssuranceView() {
                                   <CheckCircle2 className="h-3 w-3" />
                                   <span>Resolved</span>
                                 </span>
+                              ) : v.emptyEntitlementId ? (
+                                <div className="flex shrink-0 flex-col items-end gap-1.5">
+                                  {v.deletableInTarget ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          triggerEmptyEntitlementDeletion(
+                                            v.emptyEntitlementId!,
+                                            deletionExecutionMode
+                                          )
+                                        }
+                                        className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-rose-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-rose-700"
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                        <span>
+                                          {deletionExecutionMode === 'simulation'
+                                            ? 'Queue Delete Task'
+                                            : 'Trigger Deletion Task'}
+                                        </span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          approveEmptyEntitlementException(v.emptyEntitlementId!)
+                                        }
+                                        className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-slate-600 hover:border-indigo-300 hover:text-indigo-700"
+                                      >
+                                        <span>Keep (Exception)</span>
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        approveEmptyEntitlementException(v.emptyEntitlementId!)
+                                      }
+                                      className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-indigo-700"
+                                    >
+                                      <ShieldCheck className="h-3 w-3" />
+                                      <span>Approve Exception</span>
+                                    </button>
+                                  )}
+                                </div>
                               ) : (
                                 <button
                                   type="button"

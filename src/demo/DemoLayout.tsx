@@ -29,6 +29,7 @@ import {
   ShieldCheck,
   ShoppingBag,
   Sparkles,
+  UserCheck,
   UserPlus,
   Users,
   X,
@@ -40,6 +41,7 @@ import { useSceneStore } from '@/store/useSceneStore';
 import { DashboardView } from '@/demo/views/DashboardView';
 import { MyTasksView } from '@/demo/views/MyTasksView';
 import { NonHumanView, PeopleView } from '@/demo/views/IdentitiesViews';
+import { OrphanAdoptionView } from '@/demo/views/OrphanAdoptionView';
 import {
   ApplicationsView,
   EntitlementsView,
@@ -89,6 +91,7 @@ const SIDEBAR_NAV: NavGroup[] = [
     items: [
       { id: 'people', label: 'People', icon: Users },
       { id: 'non-human', label: 'Non-human IDs', icon: Bot },
+      { id: 'orphan-adoption', label: 'Orphan Adoption', icon: UserCheck },
     ],
   },
   {
@@ -221,6 +224,7 @@ export function DemoLayout() {
 
   const badgeFor = (id: DemoSectionId): number | null => {
     if (id === 'my-tasks' && totalMyTasksCount > 0) return totalMyTasksCount;
+    if (id === 'orphan-adoption' && orphanedAccounts > 0) return orphanedAccounts;
     if (id === 'onboarding' && pendingOnboarding > 0) return pendingOnboarding;
     if (id === 'role-mining' && miningOutliersCount > 0) return miningOutliersCount;
     if (id === 'governance-assurance' && assuranceViolations > 0) return assuranceViolations;
@@ -244,6 +248,8 @@ export function DemoLayout() {
         return <PeopleView />;
       case 'non-human':
         return <NonHumanView />;
+      case 'orphan-adoption':
+        return <OrphanAdoptionView />;
       case 'access-marketplace':
         return <AccessMarketplaceView />;
       case 'applications':

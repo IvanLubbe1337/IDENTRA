@@ -4,6 +4,8 @@ import {
   CURRENT_DEMO_USER_PERSON_ID,
   ENTITLEMENT_ONBOARDING_WORKFLOWS,
   INITIAL_ACCESS_REQUESTS,
+  INITIAL_ADOPTION_POLICY,
+  INITIAL_ADOPTION_RECORDS,
   INITIAL_CONTRACTOR_REQUESTS,
   INITIAL_DEMO_ACCOUNTS,
   INITIAL_DEMO_APPS,
@@ -16,6 +18,7 @@ import {
   INITIAL_DEMO_REVIEWS,
   INITIAL_DEMO_ROLES,
   INITIAL_EMAIL_NOTIFICATIONS,
+  INITIAL_EMPTY_ENTITLEMENTS,
   INITIAL_ENTITLEMENT_REQUESTS,
   INITIAL_GOVERNANCE_CONTROLS,
   INITIAL_IMPORT_RUNS,
@@ -26,15 +29,21 @@ import {
   INITIAL_PLATFORM_CONFIG,
   INITIAL_PROVISIONING_JOBS,
   INITIAL_ROLE_OPTIMISATIONS,
+  INITIAL_SYSTEM_ADOPTION_MAPPINGS,
   buildBrandedIdentraEmailHtml,
   evaluateBirthrightMatches,
+  type AdoptionHumanClassification,
+  type AdoptionNhiClassification,
+  type AdoptionPolicyConfig,
   type BrandedEmailTemplateInput,
   type DemoAccessRequest,
+  type DemoAdoptionRecord,
   type DemoApplication,
   type DemoAuditEntry,
   type DemoBirthrightRule,
   type DemoContractorOnboardingRequest,
   type DemoEmailNotification,
+  type DemoEmptyEntitlement,
   type DemoEntitlement,
   type DemoEntitlementOnboardingRequest,
   type DemoGovernanceControl,
@@ -51,12 +60,14 @@ import {
   type DemoSectionId,
   type DemoTargetAccount,
   type GovernanceControlDomain,
+  type IdentityProvenance,
   type LeaveDelegationConfig,
   type MarketplaceApproverStep,
   type MasterEmailTemplateConfig,
   type OnboardingApprovalStage,
   type PlatformConfig,
   type SmtpConfig,
+  type SystemAdoptionMapping,
 } from '@/data/demoSampleData';
 import { useSceneStore } from '@/store/useSceneStore';
 
@@ -67,6 +78,15 @@ function timeNow(): string {
 interface DemoStore {
   activeSection: DemoSectionId;
   onboardingTab: 'contractor' | 'entitlement';
+  reportingTab:
+    | 'entitlements'
+    | 'empty-entitlements'
+    | 'accounts'
+    | 'orphaned'
+    | 'unapproved'
+    | 'identity-changes'
+    | 'birthrights'
+    | 'executive';
   searchQuery: string;
   selectedPersonId: string | null;
   toastMessage: string | null;
@@ -84,10 +104,15 @@ interface DemoStore {
   reviews: DemoReviewItem[];
   policies: DemoPolicy[];
   governanceControls: DemoGovernanceControl[];
+  emptyEntitlements: DemoEmptyEntitlement[];
   contractorRequests: DemoContractorOnboardingRequest[];
   entitlementRequests: DemoEntitlementOnboardingRequest[];
   accessRequests: DemoAccessRequest[];
   leaveDelegation: LeaveDelegationConfig;
+  adoptionMappings: SystemAdoptionMapping[];
+  adoptionPolicy: AdoptionPolicyConfig;
+  adoptionRecords: DemoAdoptionRecord[];
+  pendingAdoptAccountId: string | null;
   provisioningJobs: DemoProvisioningJob[];
   importRuns: DemoImportRun[];
   emailNotifications: DemoEmailNotification[];
@@ -96,9 +121,42 @@ interface DemoStore {
 
   setActiveSection: (section: DemoSectionId) => void;
   openOnboardingTab: (tab: 'contractor' | 'entitlement') => void;
+  openReportingTab: (tab: DemoStore['reportingTab']) => void;
   setSearchQuery: (q: string) => void;
   setSelectedPersonId: (id: string | null) => void;
   clearToast: () => void;
+
+  // Orphaned Account Adoption actions
+  openOrphanAdoptionForAccount: (accountId: string | null) => void;
+  updateAdoptionPolicy: (patch: Partial<AdoptionPolicyConfig>) => void;
+  updateSystemMappingRule: (
+    systemName: string,
+    ruleId: string,
+    sourceAttribute: string
+  ) => void;
+  adoptPromoteToIdentity: (input: {
+    accountId: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    department: string;
+    employeeNumber: string;
+    manager: string;
+    managerRefId: string;
+    classification: AdoptionHumanClassification;
+    expiryDate: string | null;
+    authoritativeSource: string;
+  }) => void;
+  approvePendingAdoption: (recordId: string) => void;
+  adoptCorrelateExisting: (accountId: string, personId: string) => void;
+  adoptClassifyNonHuman: (input: {
+    accountId: string;
+    nhiKind: AdoptionNhiClassification;
+    ownerName: string;
+    privilegeScope: string;
+  }) => void;
+  bulkAdoptOrphans: (accountIds: string[], defaultOwner: string) => void;
+  rollbackAdoption: (recordId: string) => void;
 
   // Access Marketplace, Escalation & Leave Delegation actions
   submitAccessRequest: (input: {
@@ -173,6 +231,18 @@ interface DemoStore {
   ) => void;
   remediateGovernanceViolation: (controlId: string, violationId: string) => void;
   remediateAllControlViolations: (controlId: string) => void;
+  triggerEmptyEntitlementDeletion: (
+    emptyEntitlementId: string,
+    executionMode?: 'immediate' | 'simulation'
+  ) => void;
+  bulkDeleteEmptyEntitlements: (
+    emptyEntitlementIds: string[],
+    executionMode?: 'immediate' | 'simulation'
+  ) => void;
+  approveEmptyEntitlementException: (
+    emptyEntitlementId: string,
+    reason?: string
+  ) => void;
   runGovernanceDetectiveScan: () => void;
   addGovernanceControl: (input: {
     name: string;
@@ -248,6 +318,7 @@ interface DemoStore {
 export const useDemoStore = create<DemoStore>((set, get) => ({
   activeSection: 'dashboard',
   onboardingTab: 'contractor',
+  reportingTab: 'entitlements',
   searchQuery: '',
   selectedPersonId: null,
   toastMessage: null,
@@ -265,10 +336,15 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
   reviews: INITIAL_DEMO_REVIEWS,
   policies: INITIAL_DEMO_POLICIES,
   governanceControls: INITIAL_GOVERNANCE_CONTROLS,
+  emptyEntitlements: INITIAL_EMPTY_ENTITLEMENTS,
   contractorRequests: INITIAL_CONTRACTOR_REQUESTS,
   entitlementRequests: INITIAL_ENTITLEMENT_REQUESTS,
   accessRequests: INITIAL_ACCESS_REQUESTS,
   leaveDelegation: INITIAL_LEAVE_DELEGATION,
+  adoptionMappings: INITIAL_SYSTEM_ADOPTION_MAPPINGS,
+  adoptionPolicy: INITIAL_ADOPTION_POLICY,
+  adoptionRecords: INITIAL_ADOPTION_RECORDS,
+  pendingAdoptAccountId: null,
   provisioningJobs: INITIAL_PROVISIONING_JOBS,
   importRuns: INITIAL_IMPORT_RUNS,
   emailNotifications: INITIAL_EMAIL_NOTIFICATIONS,
@@ -277,9 +353,560 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
 
   setActiveSection: (section) => set({ activeSection: section }),
   openOnboardingTab: (tab) => set({ activeSection: 'onboarding', onboardingTab: tab }),
+  openReportingTab: (tab) => set({ activeSection: 'reporting', reportingTab: tab }),
   setSearchQuery: (q) => set({ searchQuery: q }),
   setSelectedPersonId: (id) => set({ selectedPersonId: id }),
   clearToast: () => set({ toastMessage: null }),
+
+  openOrphanAdoptionForAccount: (accountId) =>
+    set({
+      pendingAdoptAccountId: accountId,
+      activeSection: 'orphan-adoption',
+    }),
+
+  updateAdoptionPolicy: (patch) => {
+    const nextPolicy: AdoptionPolicyConfig = {
+      ...get().adoptionPolicy,
+      ...patch,
+      duplicateRules: {
+        ...get().adoptionPolicy.duplicateRules,
+        ...(patch.duplicateRules ?? {}),
+      },
+    };
+    set((s) => ({
+      adoptionPolicy: nextPolicy,
+      toastMessage: `Updated Orphaned Account Adoption policy (${nextPolicy.mode}).`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: timeNow(),
+          actor: 'Governance Config',
+          processTag: 'ADP-POL',
+          tone: 'sky',
+          action: `Updated Adoption Policy mode to "${nextPolicy.mode}"`,
+          target: 'Orphaned Account Adoption',
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  updateSystemMappingRule: (systemName, ruleId, sourceAttribute) => {
+    set((s) => ({
+      adoptionMappings: s.adoptionMappings.map((sys) =>
+        sys.systemName === systemName
+          ? {
+              ...sys,
+              rules: sys.rules.map((r) =>
+                r.id === ruleId ? { ...r, sourceAttribute } : r
+              ),
+            }
+          : sys
+      ),
+      toastMessage: `Updated attribute mapping on ${systemName} → ${sourceAttribute}.`,
+    }));
+  },
+
+  adoptPromoteToIdentity: (input) => {
+    const acc = get().accounts.find((a) => a.id === input.accountId);
+    if (!acc) return;
+
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const todayDisplay = todayIso.split('-').reverse().join('/');
+    const stamp = timeNow();
+    const approvalRef = `APR-${10245 + get().adoptionRecords.length}`;
+    const fullName = `${input.firstName.trim()} ${input.lastName.trim()}`;
+    const policy = get().adoptionPolicy;
+
+    // If policy requires approval, hold in Pending Approval before creating identity
+    if (policy.mode === 'Require Approval (Manager / System Owner)') {
+      const pendingRecord: DemoAdoptionRecord = {
+        id: `adp-${Date.now()}`,
+        approvalReference: approvalRef,
+        actionKind: 'Promote to Identity',
+        classification: input.classification,
+        originalAccountId: acc.id,
+        originalAccountName: acc.accountName,
+        originalSource: acc.application,
+        targetIdentityName: fullName,
+        adoptedBy: 'Ivan Lubbe',
+        adoptionDate: todayDisplay,
+        creationSource: `Orphaned account adoption · ${acc.application}`,
+        authoritativeSource: input.authoritativeSource,
+        accountCorrelationSource: acc.application,
+        expiryDate: input.expiryDate,
+        status: 'Pending Approval',
+        pendingPayload: {
+          firstName: input.firstName.trim(),
+          lastName: input.lastName.trim(),
+          email: input.email.trim(),
+          department: input.department.trim() || 'Corporate Finance & Treasury',
+          employeeNumber: input.employeeNumber.trim(),
+          manager: input.manager,
+          managerRefId: input.managerRefId,
+          classification: input.classification,
+          expiryDate: input.expiryDate,
+          authoritativeSource: input.authoritativeSource,
+        },
+      };
+
+      set((s) => ({
+        adoptionRecords: [pendingRecord, ...s.adoptionRecords],
+        toastMessage: `Adoption ${approvalRef} for "${acc.accountName}" queued for Manager/Owner approval before creating ${fullName}.`,
+        auditLog: [
+          {
+            id: `aud-${Date.now()}`,
+            time: stamp,
+            actor: 'Orphan Adoption',
+            processTag: 'ADP-REQ',
+            tone: 'amber',
+            action: `Queued orphaned account adoption (${approvalRef}) for ${acc.accountName} awaiting approval`,
+            target: fullName,
+          },
+          ...s.auditLog,
+        ],
+      }));
+      return;
+    }
+
+    const newPersonId = `p-adp-${Date.now()}`;
+    const isContractor = input.classification !== 'Employee';
+    const provenance: IdentityProvenance = {
+      creationMethod: 'Orphaned account adoption',
+      creationSource: `Orphaned account adoption · ${acc.application}`,
+      authoritativeSource: input.authoritativeSource,
+      accountCorrelationSource: acc.application,
+      originalAccountId: acc.accountName,
+      adoptedBy: 'Ivan Lubbe',
+      adoptionDate: todayDisplay,
+      approvalReference: approvalRef,
+    };
+
+    const newPerson: DemoPerson = {
+      id: newPersonId,
+      firstName: input.firstName.trim(),
+      lastName: input.lastName.trim(),
+      name: fullName,
+      employeeNumber: input.employeeNumber.trim(),
+      email: input.email.trim().toLowerCase(),
+      upn: `${acc.accountName}@corp.identra.net`,
+      samAccountName: acc.accountName,
+      title: isContractor ? input.classification : `${input.department || 'Finance'} Specialist`,
+      department: input.department.trim() || 'Corporate Finance & Treasury',
+      departmentRefId: input.department.toLowerCase().includes('finance')
+        ? 'dept-finance'
+        : isContractor
+          ? 'dept-contractor'
+          : 'dept-eng',
+      companyName: isContractor ? 'External Partner (Adopted)' : 'IDENTRA Global Holdings Ltd',
+      companyRefId: isContractor ? 'comp-ext-audit' : 'comp-identra-uk',
+      orgUnitName: isContractor ? 'External Contractors & Auditors' : 'EMEA Finance Operations',
+      orgUnitRefId: isContractor ? 'ou-ext-contractors' : 'ou-fin-analysts',
+      costCenterCode: isContractor ? 'CC-9001-EXT' : 'CC-4100-FIN',
+      costCenterRefId: isContractor ? 'cc-9001' : 'cc-4100',
+      location: 'Johannesburg / HQ',
+      type: isContractor ? 'Contractor' : 'Employee',
+      contractType: isContractor
+        ? `Adopted ${input.classification} (Expires ${input.expiryDate ?? '90d'})`
+        : 'Full-Time Permanent (Adopted)',
+      hrStartDate: todayIso,
+      hrEndDate: input.expiryDate,
+      sourceSystem: input.authoritativeSource,
+      sourceRefId: 'src-workday',
+      sourceExternalId: approvalRef,
+      lastHrSync: `Adopted ${todayDisplay} · ${stamp}`,
+      jmlStatus: 'Active',
+      riskScore: 18,
+      roles: ['Corporate SSO Standard'],
+      applications: [acc.application],
+      manager: input.manager,
+      managerRefId: input.managerRefId,
+      contextRefIds: [isContractor ? 'ctx-ext-audit' : 'ctx-fin-uk-fte'],
+      lastAttestation: `Adopted from ${acc.application} (${approvalRef})`,
+      provenance,
+      changeHistory: [
+        {
+          id: `h-adp-${Date.now()}`,
+          timestamp: `${todayIso} ${stamp}`,
+          source: `Orphaned Account Adoption (${approvalRef})`,
+          category: 'JML Lifecycle',
+          summary: `Identity adopted from orphaned ${acc.application} account "${acc.accountName}" by Ivan Lubbe. Authoritative source set to ${input.authoritativeSource}.`,
+          changes: [
+            { field: 'creationMethod', before: null, after: 'Orphaned account adoption' },
+            { field: 'originalAccount', before: 'Orphaned', after: `${acc.accountName} (${acc.application})` },
+            { field: 'authoritativeSource', before: null, after: input.authoritativeSource },
+            { field: 'manager', before: 'Missing', after: input.manager },
+            { field: 'employeeNumber', before: 'Missing', after: input.employeeNumber.trim() },
+          ],
+        },
+      ],
+    };
+
+    const completedRecord: DemoAdoptionRecord = {
+      id: `adp-${Date.now()}`,
+      approvalReference: approvalRef,
+      actionKind: 'Promote to Identity',
+      classification: input.classification,
+      originalAccountId: acc.id,
+      originalAccountName: acc.accountName,
+      originalSource: acc.application,
+      targetIdentityName: fullName,
+      createdPersonId: newPersonId,
+      adoptedBy: 'Ivan Lubbe',
+      adoptionDate: todayDisplay,
+      creationSource: `Orphaned account adoption · ${acc.application}`,
+      authoritativeSource: input.authoritativeSource,
+      accountCorrelationSource: acc.application,
+      expiryDate: input.expiryDate,
+      status: 'Completed',
+    };
+
+    const { smtp, emailTemplate } = get().platformConfig;
+    const msgCode = `EML-${7049 + get().emailNotifications.length}`;
+    const mgrEmail = `${input.manager.toLowerCase().replace(/\s+/g, '.')}@identra-corp.io`;
+    const tplData: BrandedEmailTemplateInput = {
+      badgeText: `ORPHAN ADOPTED · ${approvalRef}`,
+      badgeTone: 'emerald',
+      headline: `Orphaned Account "${acc.accountName}" Adopted Into Governance`,
+      greeting: `Hi ${input.manager},`,
+      intro: `Orphaned ${acc.application} account "${acc.accountName}" has been promoted to a governed ${input.classification} identity (${fullName}) and correlated under your management.`,
+      metadataRows: [
+        { label: 'Approval Reference', value: approvalRef, mono: true },
+        { label: 'Created Identity', value: `${fullName} (${input.employeeNumber.trim()})` },
+        { label: 'Original Source Account', value: `${acc.accountName} (${acc.application})`, mono: true },
+        { label: 'Creation Source', value: `Orphaned account adoption · ${acc.application}` },
+        { label: 'Authoritative Source', value: input.authoritativeSource },
+        { label: 'Adopted By', value: `Ivan Lubbe · ${todayDisplay}` },
+      ],
+      calloutTitle: 'Authoritative Source Separation Preserved',
+      calloutText: `${acc.application} was recorded as the creation and correlation source only — authoritative maintenance remains assigned to "${input.authoritativeSource}".`,
+      ctaLabel: 'Inspect Adopted Identity',
+      ctaUrl: 'https://identra-two.vercel.app/#demo',
+      messageCode: msgCode,
+      timestamp: `${todayIso} ${stamp}`,
+    };
+
+    const adoptEmail: DemoEmailNotification = {
+      id: `eml-adp-${Date.now()}`,
+      messageCode: msgCode,
+      timestamp: `${todayIso} ${stamp}`,
+      status: 'Delivered',
+      trigger: `Orphaned Account Adoption · ${acc.accountName} (${approvalRef})`,
+      triggerCategory: 'JML Lifecycle',
+      recipientName: input.manager,
+      recipientEmail: mgrEmail,
+      recipientRole: 'Assigned Manager / Owner',
+      from: `${smtp.fromName} <${smtp.fromEmail}>`,
+      subject: `Orphaned Account Adopted (${approvalRef}): ${fullName} ← ${acc.accountName}`,
+      smtpProvider: `${smtp.host}:${smtp.port} · ${smtp.encryption}`,
+      deliveryLatencyMs: 184,
+      templateData: tplData,
+      htmlBody: buildBrandedIdentraEmailHtml(tplData, emailTemplate),
+    };
+
+    set((s) => ({
+      people: [newPerson, ...s.people],
+      accounts: s.accounts.map((a) =>
+        a.id === acc.id
+          ? {
+              ...a,
+              personId: newPersonId,
+              correlatedIdentity: fullName,
+              correlationState: 'Correlated',
+              orphanReason: undefined,
+              riskScore: 18,
+            }
+          : a
+      ),
+      adoptionRecords: [completedRecord, ...s.adoptionRecords],
+      emailNotifications: [adoptEmail, ...s.emailNotifications],
+      pendingAdoptAccountId: null,
+      toastMessage: `Adopted "${acc.accountName}" → created ${fullName} (${input.employeeNumber.trim()}) and correlated account (${approvalRef}).`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'Ivan Lubbe (Adoption)',
+          processTag: 'ADP-NEW',
+          tone: 'emerald',
+          action: `Promoted orphaned ${acc.application} account "${acc.accountName}" to ${input.classification} (${approvalRef})`,
+          target: fullName,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  approvePendingAdoption: (recordId) => {
+    const rec = get().adoptionRecords.find((r) => r.id === recordId);
+    if (!rec || rec.status !== 'Pending Approval' || !rec.pendingPayload) return;
+
+    const payload = rec.pendingPayload;
+    const prevMode = get().adoptionPolicy.mode;
+    // Temporarily execute immediate creation while preserving approval ref
+    set((s) => ({
+      adoptionRecords: s.adoptionRecords.filter((r) => r.id !== recordId),
+      adoptionPolicy: { ...s.adoptionPolicy, mode: 'Immediate (Permitted)' },
+    }));
+    get().adoptPromoteToIdentity({
+      accountId: rec.originalAccountId,
+      ...payload,
+    });
+    set((s) => ({
+      adoptionPolicy: { ...s.adoptionPolicy, mode: prevMode },
+    }));
+  },
+
+  adoptCorrelateExisting: (accountId, personId) => {
+    const acc = get().accounts.find((a) => a.id === accountId);
+    const person = get().people.find((p) => p.id === personId);
+    if (!acc || !person) return;
+
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const todayDisplay = todayIso.split('-').reverse().join('/');
+    const stamp = timeNow();
+    const approvalRef = `APR-${10245 + get().adoptionRecords.length}`;
+
+    const record: DemoAdoptionRecord = {
+      id: `adp-cor-${Date.now()}`,
+      approvalReference: approvalRef,
+      actionKind: 'Correlate to Existing',
+      classification: `${person.type} (Existing Identity)`,
+      originalAccountId: acc.id,
+      originalAccountName: acc.accountName,
+      originalSource: acc.application,
+      targetIdentityName: person.name,
+      correlatedPersonId: person.id,
+      adoptedBy: 'Ivan Lubbe',
+      adoptionDate: todayDisplay,
+      creationSource: `Manual correlation · ${acc.application}`,
+      authoritativeSource: person.sourceSystem,
+      accountCorrelationSource: acc.application,
+      status: 'Completed',
+    };
+
+    set((s) => ({
+      accounts: s.accounts.map((a) =>
+        a.id === acc.id
+          ? {
+              ...a,
+              personId: person.id,
+              correlatedIdentity: person.name,
+              correlationState: 'Correlated',
+              orphanReason: undefined,
+              riskScore: Math.min(a.riskScore, 20),
+            }
+          : a
+      ),
+      people: s.people.map((p) =>
+        p.id === person.id
+          ? {
+              ...p,
+              applications: p.applications.includes(acc.application)
+                ? p.applications
+                : [...p.applications, acc.application],
+              changeHistory: [
+                {
+                  id: `h-cor-${Date.now()}`,
+                  timestamp: `${todayIso} ${stamp}`,
+                  source: `Orphaned Account Correlation (${approvalRef})`,
+                  category: 'Provisioning',
+                  summary: `Correlated orphaned ${acc.application} account "${acc.accountName}" to existing identity (duplicate prevented).`,
+                  changes: [
+                    { field: 'correlatedAccount', before: 'Orphaned', after: `${acc.accountName} (${acc.application})` },
+                    { field: 'approvalReference', before: null, after: approvalRef },
+                  ],
+                },
+                ...p.changeHistory,
+              ],
+            }
+          : p
+      ),
+      adoptionRecords: [record, ...s.adoptionRecords],
+      pendingAdoptAccountId: null,
+      toastMessage: `Correlated "${acc.accountName}" (${acc.application}) to existing identity ${person.name} — duplicate avoided (${approvalRef}).`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'Ivan Lubbe (Adoption)',
+          processTag: 'ADP-COR',
+          tone: 'sky',
+          action: `Correlated orphaned account "${acc.accountName}" to existing identity (${approvalRef})`,
+          target: person.name,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  adoptClassifyNonHuman: (input) => {
+    const acc = get().accounts.find((a) => a.id === input.accountId);
+    if (!acc) return;
+
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const todayDisplay = todayIso.split('-').reverse().join('/');
+    const stamp = timeNow();
+    const approvalRef = `APR-${10245 + get().adoptionRecords.length}`;
+    const newNhiId = `nh-adp-${Date.now()}`;
+
+    const mappedKind: DemoNonHuman['kind'] =
+      input.nhiKind === 'API Token' ? 'API Token' : 'Service Account';
+
+    const newNhi: DemoNonHuman = {
+      id: newNhiId,
+      name: acc.accountName,
+      kind: mappedKind,
+      owner: input.ownerName,
+      targetSystem: acc.application,
+      privilegeScope: input.privilegeScope || `${input.nhiKind} · Governed via Adoption`,
+      status: 'Governed',
+      riskScore: 16,
+      lastRotated: 'Registered just now',
+    };
+
+    const record: DemoAdoptionRecord = {
+      id: `adp-nhi-${Date.now()}`,
+      approvalReference: approvalRef,
+      actionKind: 'Classify as Non-Human',
+      classification: input.nhiKind,
+      originalAccountId: acc.id,
+      originalAccountName: acc.accountName,
+      originalSource: acc.application,
+      targetIdentityName: `${acc.accountName} (Owner: ${input.ownerName})`,
+      createdNonHumanId: newNhiId,
+      adoptedBy: 'Ivan Lubbe',
+      adoptionDate: todayDisplay,
+      creationSource: `Orphaned account adoption · ${acc.application}`,
+      authoritativeSource: 'IDENTRA NHI Registry',
+      accountCorrelationSource: acc.application,
+      status: 'Completed',
+    };
+
+    set((s) => ({
+      nonHumans: s.nonHumans.some((n) => n.name === acc.accountName)
+        ? s.nonHumans.map((n) =>
+            n.name === acc.accountName
+              ? { ...n, owner: input.ownerName, status: 'Governed', riskScore: 16 }
+              : n
+          )
+        : [newNhi, ...s.nonHumans],
+      accounts: s.accounts.map((a) =>
+        a.id === acc.id
+          ? {
+              ...a,
+              correlatedIdentity: `${input.ownerName} (NHI Owner)`,
+              correlationState: 'Correlated',
+              orphanReason: undefined,
+              riskScore: 16,
+            }
+          : a
+      ),
+      adoptionRecords: [record, ...s.adoptionRecords],
+      pendingAdoptAccountId: null,
+      toastMessage: `Classified "${acc.accountName}" as Non-Human Identity (${input.nhiKind}) with accountable owner ${input.ownerName} (${approvalRef}).`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'Ivan Lubbe (Adoption)',
+          processTag: 'ADP-NHI',
+          tone: 'emerald',
+          action: `Classified orphaned ${acc.application} account as ${input.nhiKind} · Owner: ${input.ownerName} (${approvalRef})`,
+          target: acc.accountName,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  bulkAdoptOrphans: (accountIds, defaultOwner) => {
+    const targets = get().accounts.filter(
+      (a) => accountIds.includes(a.id) && a.correlationState === 'Orphaned'
+    );
+    if (targets.length === 0) return;
+
+    targets.forEach((acc) => {
+      if (
+        acc.accountType === 'Service Account' ||
+        acc.accountType === 'API Token' ||
+        acc.accountType === 'AI Agent'
+      ) {
+        get().adoptClassifyNonHuman({
+          accountId: acc.id,
+          nhiKind: acc.accountType === 'API Token' ? 'API Token' : 'Service Account',
+          ownerName: defaultOwner,
+          privilegeScope: `Bulk-adopted ${acc.accountType} on ${acc.application}`,
+        });
+      } else {
+        const raw = acc.rawAttributes ?? {};
+        const first = raw.givenName || raw.NAME_FIRST || acc.accountName.split('.')[0] || 'Adopted';
+        const last = raw.sn || raw.NAME_LAST || 'User';
+        const mail = raw.mail || raw.SMTP_ADDR || `${acc.accountName}@company.com`;
+        const empNo = raw.employeeNumber || `ADP-${Math.floor(10000 + Math.random() * 89999)}`;
+        get().adoptPromoteToIdentity({
+          accountId: acc.id,
+          firstName: first,
+          lastName: last,
+          email: mail,
+          department: raw.department || 'Corporate Finance & Treasury',
+          employeeNumber: empNo,
+          manager: defaultOwner,
+          managerRefId: 'mgr-claire',
+          classification: acc.accountType === 'Contractor' ? 'Contractor' : 'Employee',
+          expiryDate: acc.accountType === 'Contractor' ? '2027-02-23' : null,
+          authoritativeSource: get().adoptionPolicy.defaultAuthoritativeSource,
+        });
+      }
+    });
+
+    set({
+      toastMessage: `Bulk adoption processed ${targets.length} orphaned account(s) using per-system mappings and default owner ${defaultOwner}.`,
+    });
+  },
+
+  rollbackAdoption: (recordId) => {
+    const rec = get().adoptionRecords.find((r) => r.id === recordId);
+    if (!rec || rec.status !== 'Completed') return;
+
+    const stamp = timeNow();
+    set((s) => ({
+      adoptionRecords: s.adoptionRecords.map((r) =>
+        r.id === recordId ? { ...r, status: 'Rolled Back' } : r
+      ),
+      accounts: s.accounts.map((a) =>
+        a.id === rec.originalAccountId
+          ? {
+              ...a,
+              personId: undefined,
+              correlatedIdentity: null,
+              correlationState: 'Orphaned',
+              orphanReason: `Adoption ${rec.approvalReference} rolled back on ${new Date().toISOString().slice(0, 10)}; awaiting re-classification.`,
+              riskScore: 74,
+            }
+          : a
+      ),
+      people: rec.createdPersonId
+        ? s.people.filter((p) => p.id !== rec.createdPersonId)
+        : s.people,
+      nonHumans: rec.createdNonHumanId
+        ? s.nonHumans.filter((n) => n.id !== rec.createdNonHumanId)
+        : s.nonHumans,
+      toastMessage: `Rolled back adoption ${rec.approvalReference} ("${rec.originalAccountName}") — account returned to Orphaned queue and audit history preserved.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'Ivan Lubbe (Rollback)',
+          processTag: 'ADP-UNDO',
+          tone: 'amber',
+          action: `Rolled back ${rec.actionKind} (${rec.approvalReference}); restored "${rec.originalAccountName}" to Orphaned`,
+          target: rec.targetIdentityName,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
 
   submitAccessRequest: (input) => {
     const targetPerson = get().people.find((p) => p.id === input.targetPersonId);
@@ -1680,6 +2307,19 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
     const viol = ctrl?.violations.find((v) => v.id === violationId);
     if (!ctrl || !viol || viol.resolved) return;
 
+    // Delegate zero-member entitlement violations to target deletion / exception actions
+    if (viol.emptyEntitlementId) {
+      if (viol.deletableInTarget) {
+        get().triggerEmptyEntitlementDeletion(viol.emptyEntitlementId, 'immediate');
+      } else {
+        get().approveEmptyEntitlementException(
+          viol.emptyEntitlementId,
+          viol.nonDeletableReason ?? 'Approved Governance Exception (Target Deletion Not Applicable)'
+        );
+      }
+      return;
+    }
+
     set((s) => ({
       governanceControls: s.governanceControls.map((c) =>
         c.id === controlId
@@ -1711,9 +2351,30 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
   remediateAllControlViolations: (controlId) => {
     const ctrl = get().governanceControls.find((c) => c.id === controlId);
     if (!ctrl) return;
-    const openCount = ctrl.violations.filter((v) => !v.resolved).length;
-    if (openCount === 0) return;
+    const openViolations = ctrl.violations.filter((v) => !v.resolved);
+    if (openViolations.length === 0) return;
 
+    if (controlId === 'ga-empty-entitlements') {
+      const deletableIds = openViolations
+        .filter((v) => v.emptyEntitlementId && v.deletableInTarget)
+        .map((v) => v.emptyEntitlementId as string);
+      const exceptionIds = openViolations
+        .filter((v) => v.emptyEntitlementId && !v.deletableInTarget)
+        .map((v) => v.emptyEntitlementId as string);
+
+      if (deletableIds.length > 0) {
+        get().bulkDeleteEmptyEntitlements(deletableIds, 'immediate');
+      }
+      exceptionIds.forEach((eid) => {
+        get().approveEmptyEntitlementException(
+          eid,
+          'Protected system/break-glass entitlement — approved exception under GA-CTRL-07'
+        );
+      });
+      return;
+    }
+
+    const openCount = openViolations.length;
     set((s) => ({
       governanceControls: s.governanceControls.map((c) =>
         c.id === controlId
@@ -1734,6 +2395,331 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
           tone: 'emerald',
           action: `Remediated ${openCount} violations on ${ctrl.code}; status restored to Compliant`,
           target: ctrl.name,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  triggerEmptyEntitlementDeletion: (emptyEntitlementId, executionMode = 'immediate') => {
+    const ent = get().emptyEntitlements.find((e) => e.id === emptyEntitlementId);
+    if (!ent) return;
+
+    if (!ent.deletableInTarget) {
+      set({
+        toastMessage: `Target deletion blocked for "${ent.name}": ${ent.nonDeletableReason ?? 'Protected entitlement — approve a governance exception instead.'}`,
+      });
+      return;
+    }
+
+    if (ent.status === 'Deleted in Target' || ent.status === 'Deletion Queued') {
+      return;
+    }
+
+    const stamp = timeNow();
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const jobNumber = 9050 + get().provisioningJobs.length;
+    const jobCode = `PRV-${jobNumber}`;
+    const jobId = `prv-del-ent-${Date.now()}`;
+    const isSimulation = executionMode === 'simulation';
+
+    const deletionJob: DemoProvisioningJob = {
+      id: jobId,
+      jobCode,
+      identity: `Target Entitlement (0 Members)`,
+      identityEmail: ent.owner
+        ? `${ent.owner.toLowerCase().replace(/\s+/g, '.')}@identra-corp.io`
+        : 'iam-ops@identra-corp.io',
+      entitlementOrRole: ent.name,
+      application: ent.application,
+      operation: 'Delete',
+      status: isSimulation ? 'Simulation Mode' : 'Completed',
+      triggeredBy: 'Governance Assurance · GA-CTRL-07 (Empty Entitlement Hygiene)',
+      timestamp: stamp,
+      durationMs: isSimulation ? null : 240 + Math.floor(Math.random() * 140),
+      mappings: [
+        {
+          attribute: 'technicalId',
+          before: ent.technicalId,
+          after: null,
+          rule: `Target Deletion (${ent.connectorAction})`,
+        },
+        {
+          attribute: 'memberCount',
+          before: '0 active members',
+          after: 'Decommissioned',
+          rule: `GA-CTRL-07 Empty Threshold (${ent.daysEmpty}d > 30d)`,
+        },
+        {
+          attribute: 'objectState',
+          before: `Active in ${ent.application}`,
+          after: isSimulation ? 'Pending Release (Simulation)' : 'Deleted in Target System',
+          rule: isSimulation
+            ? 'Queued in Provisioning Engine Simulation Gate'
+            : 'Direct Target Connector Decommission',
+        },
+      ],
+    };
+
+    const nextStatus = isSimulation ? 'Deletion Queued' : 'Deleted in Target';
+    const outcomeLabel = isSimulation
+      ? `Deletion task ${jobCode} queued in Provisioning Engine (Simulation Mode)`
+      : `Deleted in ${ent.application} via target connector task ${jobCode}`;
+
+    const { smtp, emailTemplate } = get().platformConfig;
+    const msgCode = `EML-${7049 + get().emailNotifications.length}`;
+    const recipientName = ent.owner ?? 'IAM Operations';
+    const recipientEmail = ent.owner
+      ? `${ent.owner.toLowerCase().replace(/\s+/g, '.')}@identra-corp.io`
+      : 'iam-ops@identra-corp.io';
+
+    const tplData: BrandedEmailTemplateInput = {
+      badgeText: isSimulation
+        ? `DELETION QUEUED · ${jobCode}`
+        : `TARGET ENTITLEMENT DELETED · ${jobCode}`,
+      badgeTone: isSimulation ? 'amber' : 'emerald',
+      headline: isSimulation
+        ? `Target Deletion Task Queued for Empty Entitlement "${ent.name}"`
+        : `Empty Entitlement "${ent.name}" Deleted from ${ent.application}`,
+      greeting: `Hi ${recipientName},`,
+      intro: `Governance Assurance control GA-CTRL-07 (Empty Target Entitlements) triggered a target-system deletion task for "${ent.name}", which had 0 active members for ${ent.daysEmpty} days.`,
+      metadataRows: [
+        { label: 'Provisioning Task', value: `${jobCode} (${isSimulation ? 'Simulation Mode' : 'Executed'})`, mono: true },
+        { label: 'Target System', value: ent.application },
+        { label: 'Entitlement', value: ent.name, mono: true },
+        { label: 'Technical ID', value: ent.technicalId, mono: true },
+        { label: 'Connector Operation', value: ent.connectorAction, mono: true },
+        { label: 'Days With 0 Members', value: `${ent.daysEmpty} days (Last removed ${ent.lastMemberRemovedAt})` },
+      ],
+      calloutTitle: isSimulation
+        ? 'Awaiting Simulation Release in Provisioning Engine'
+        : 'Target System Hygiene Restored',
+      calloutText: isSimulation
+        ? `Inspect and release ${jobCode} under Operations → Provisioning Engine to commit the DELETE operation to ${ent.application}.`
+        : `${ent.application} confirmed removal of "${ent.name}". Governance Assurance violation ${ent.governanceViolationId} has been marked Resolved.`,
+      ctaLabel: 'Open Provisioning Engine',
+      ctaUrl: 'https://identra-two.vercel.app/#demo',
+      messageCode: msgCode,
+      timestamp: `${todayIso} ${stamp}`,
+    };
+
+    const deletionEmail: DemoEmailNotification = {
+      id: `eml-del-ent-${Date.now()}`,
+      messageCode: msgCode,
+      timestamp: `${todayIso} ${stamp}`,
+      status: 'Delivered',
+      trigger: `GA-CTRL-07 Target Entitlement Deletion · ${ent.name} (${jobCode})`,
+      triggerCategory: 'Operations',
+      recipientName,
+      recipientEmail,
+      recipientRole: ent.owner ? 'Entitlement Owner' : 'IAM Operations',
+      from: `${smtp.fromName} <${smtp.fromEmail}>`,
+      subject: `[${jobCode}] ${isSimulation ? 'Queued Deletion' : 'Deleted Empty Entitlement'}: ${ent.name} (${ent.application})`,
+      smtpProvider: `${smtp.host}:${smtp.port} · ${smtp.encryption}`,
+      deliveryLatencyMs: 162,
+      templateData: tplData,
+      htmlBody: buildBrandedIdentraEmailHtml(tplData, emailTemplate),
+    };
+
+    set((s) => ({
+      provisioningJobs: [deletionJob, ...s.provisioningJobs],
+      emptyEntitlements: s.emptyEntitlements.map((item) =>
+        item.id === emptyEntitlementId
+          ? {
+              ...item,
+              status: nextStatus,
+              deletionJobId: jobId,
+              deletionJobCode: jobCode,
+            }
+          : item
+      ),
+      governanceControls: s.governanceControls.map((ctrl) =>
+        ctrl.id === 'ga-empty-entitlements'
+          ? {
+              ...ctrl,
+              lastScanAt: 'Just now',
+              violations: ctrl.violations.map((v) =>
+                v.emptyEntitlementId === emptyEntitlementId
+                  ? {
+                      ...v,
+                      resolved: true,
+                      deletionJobId: jobId,
+                      deletionJobCode: jobCode,
+                      remediationOutcome: outcomeLabel,
+                    }
+                  : v
+              ),
+            }
+          : ctrl
+      ),
+      emailNotifications: [deletionEmail, ...s.emailNotifications],
+      toastMessage: isSimulation
+        ? `Queued target deletion task ${jobCode} for "${ent.name}" (${ent.application}) in Provisioning Engine Simulation Mode.`
+        : `Triggered target deletion task ${jobCode} — removed empty entitlement "${ent.name}" from ${ent.application}.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'Governance Assurance',
+          processTag: 'GA-DEL',
+          tone: isSimulation ? 'amber' : 'emerald',
+          action: `${isSimulation ? 'Queued simulated' : 'Executed'} target deletion task ${jobCode} (${ent.connectorAction}) for 0-member entitlement`,
+          target: `${ent.name} · ${ent.application}`,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  bulkDeleteEmptyEntitlements: (emptyEntitlementIds, executionMode = 'immediate') => {
+    const eligible = get().emptyEntitlements.filter(
+      (e) =>
+        emptyEntitlementIds.includes(e.id) &&
+        e.deletableInTarget &&
+        e.status === 'Empty (Flagged)'
+    );
+    if (eligible.length === 0) return;
+
+    const stamp = timeNow();
+    const isSimulation = executionMode === 'simulation';
+    const baseNum = 9050 + get().provisioningJobs.length;
+
+    const newJobs: DemoProvisioningJob[] = [];
+    const jobByEntId = new Map<string, { id: string; code: string }>();
+
+    eligible.forEach((ent, idx) => {
+      const jobCode = `PRV-${baseNum + idx}`;
+      const jobId = `prv-del-ent-${Date.now()}-${idx}`;
+      jobByEntId.set(ent.id, { id: jobId, code: jobCode });
+      newJobs.push({
+        id: jobId,
+        jobCode,
+        identity: 'Target Entitlement (0 Members)',
+        identityEmail: ent.owner
+          ? `${ent.owner.toLowerCase().replace(/\s+/g, '.')}@identra-corp.io`
+          : 'iam-ops@identra-corp.io',
+        entitlementOrRole: ent.name,
+        application: ent.application,
+        operation: 'Delete',
+        status: isSimulation ? 'Simulation Mode' : 'Completed',
+        triggeredBy: 'Governance Assurance · GA-CTRL-07 Batch Remediation',
+        timestamp: stamp,
+        durationMs: isSimulation ? null : 210 + idx * 35,
+        mappings: [
+          {
+            attribute: 'technicalId',
+            before: ent.technicalId,
+            after: null,
+            rule: `Target Deletion (${ent.connectorAction})`,
+          },
+          {
+            attribute: 'memberCount',
+            before: '0 active members',
+            after: 'Decommissioned',
+            rule: `GA-CTRL-07 Empty Threshold (${ent.daysEmpty}d > 30d)`,
+          },
+        ],
+      });
+    });
+
+    const nextStatus = isSimulation ? 'Deletion Queued' : 'Deleted in Target';
+
+    set((s) => ({
+      provisioningJobs: [...newJobs, ...s.provisioningJobs],
+      emptyEntitlements: s.emptyEntitlements.map((ent) => {
+        const ref = jobByEntId.get(ent.id);
+        if (!ref) return ent;
+        return {
+          ...ent,
+          status: nextStatus,
+          deletionJobId: ref.id,
+          deletionJobCode: ref.code,
+        };
+      }),
+      governanceControls: s.governanceControls.map((ctrl) =>
+        ctrl.id === 'ga-empty-entitlements'
+          ? {
+              ...ctrl,
+              lastScanAt: 'Just now',
+              violations: ctrl.violations.map((v) => {
+                if (!v.emptyEntitlementId) return v;
+                const ref = jobByEntId.get(v.emptyEntitlementId);
+                if (!ref) return v;
+                return {
+                  ...v,
+                  resolved: true,
+                  deletionJobId: ref.id,
+                  deletionJobCode: ref.code,
+                  remediationOutcome: isSimulation
+                    ? `Batch deletion task ${ref.code} queued (Simulation Mode)`
+                    : `Deleted in ${v.targetSystem} via batch task ${ref.code}`,
+                };
+              }),
+            }
+          : ctrl
+      ),
+      toastMessage: `${isSimulation ? 'Queued' : 'Executed'} ${eligible.length} target-system deletion task(s) (${newJobs.map((j) => j.jobCode).join(', ')}) for empty entitlements.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'Governance Assurance',
+          processTag: 'GA-DEL',
+          tone: isSimulation ? 'amber' : 'emerald',
+          action: `${isSimulation ? 'Queued' : 'Executed'} batch target deletion for ${eligible.length} zero-member entitlements (${newJobs.map((j) => j.jobCode).join(', ')})`,
+          target: 'GA-CTRL-07 · Target Connectors',
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  approveEmptyEntitlementException: (emptyEntitlementId, reason) => {
+    const ent = get().emptyEntitlements.find((e) => e.id === emptyEntitlementId);
+    if (!ent) return;
+    const stamp = timeNow();
+    const note =
+      reason?.trim() ||
+      ent.nonDeletableReason ||
+      'Approved standing retention exception under GA-CTRL-07 (reviewed by IAM Governance).';
+
+    set((s) => ({
+      emptyEntitlements: s.emptyEntitlements.map((item) =>
+        item.id === emptyEntitlementId
+          ? {
+              ...item,
+              status: 'Exception Approved',
+              exceptionReason: note,
+            }
+          : item
+      ),
+      governanceControls: s.governanceControls.map((ctrl) =>
+        ctrl.id === 'ga-empty-entitlements'
+          ? {
+              ...ctrl,
+              lastScanAt: 'Just now',
+              violations: ctrl.violations.map((v) =>
+                v.emptyEntitlementId === emptyEntitlementId
+                  ? {
+                      ...v,
+                      resolved: true,
+                      remediationOutcome: `Governance Exception Approved — retained without target deletion`,
+                    }
+                  : v
+              ),
+            }
+          : ctrl
+      ),
+      toastMessage: `Approved governance exception for empty entitlement "${ent.name}" (${ent.application}) — target deletion skipped.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'Governance Assurance',
+          processTag: 'GA-EXC',
+          tone: 'sky',
+          action: `Approved GA-CTRL-07 retention exception for 0-member entitlement`,
+          target: `${ent.name} · ${ent.application}`,
         },
         ...s.auditLog,
       ],
@@ -2362,6 +3348,25 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
             }
           : j
       ),
+      emptyEntitlements: s.emptyEntitlements.map((e) =>
+        e.deletionJobId === jobId ? { ...e, status: 'Deleted in Target' } : e
+      ),
+      governanceControls: s.governanceControls.map((c) =>
+        c.id === 'ga-empty-entitlements'
+          ? {
+              ...c,
+              violations: c.violations.map((v) =>
+                v.deletionJobId === jobId
+                  ? {
+                      ...v,
+                      resolved: true,
+                      remediationOutcome: `Deleted in ${job.application} via released task ${job.jobCode}`,
+                    }
+                  : v
+              ),
+            }
+          : c
+      ),
       toastMessage: `Released ${job.jobCode} (${job.operation} on ${job.application}) for ${job.identity} to target connector.`,
       auditLog: [
         {
@@ -2395,6 +3400,27 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
             }
           : j
       ),
+      emptyEntitlements: s.emptyEntitlements.map((e) =>
+        e.deletionJobId && jobIds.includes(e.deletionJobId)
+          ? { ...e, status: 'Deleted in Target' }
+          : e
+      ),
+      governanceControls: s.governanceControls.map((c) =>
+        c.id === 'ga-empty-entitlements'
+          ? {
+              ...c,
+              violations: c.violations.map((v) =>
+                v.deletionJobId && jobIds.includes(v.deletionJobId)
+                  ? {
+                      ...v,
+                      resolved: true,
+                      remediationOutcome: `Deleted in ${v.targetSystem} via released task ${v.deletionJobCode}`,
+                    }
+                  : v
+              ),
+            }
+          : c
+      ),
       toastMessage: `Approved & released ${matching.length} simulated provisioning jobs to target applications.`,
       auditLog: [
         {
@@ -2416,6 +3442,34 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
     if (!job) return;
     set((s) => ({
       provisioningJobs: s.provisioningJobs.filter((j) => j.id !== jobId),
+      emptyEntitlements: s.emptyEntitlements.map((e) =>
+        e.deletionJobId === jobId
+          ? {
+              ...e,
+              status: 'Empty (Flagged)',
+              deletionJobId: undefined,
+              deletionJobCode: undefined,
+            }
+          : e
+      ),
+      governanceControls: s.governanceControls.map((c) =>
+        c.id === 'ga-empty-entitlements'
+          ? {
+              ...c,
+              violations: c.violations.map((v) =>
+                v.deletionJobId === jobId
+                  ? {
+                      ...v,
+                      resolved: false,
+                      deletionJobId: undefined,
+                      deletionJobCode: undefined,
+                      remediationOutcome: undefined,
+                    }
+                  : v
+              ),
+            }
+          : c
+      ),
       toastMessage: `Discarded simulated job ${job.jobCode} for ${job.identity} — no changes sent to ${job.application}.`,
       auditLog: [
         {
@@ -3338,10 +4392,15 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
       reviews: INITIAL_DEMO_REVIEWS,
       policies: INITIAL_DEMO_POLICIES,
       governanceControls: INITIAL_GOVERNANCE_CONTROLS,
+      emptyEntitlements: INITIAL_EMPTY_ENTITLEMENTS,
       contractorRequests: INITIAL_CONTRACTOR_REQUESTS,
       entitlementRequests: INITIAL_ENTITLEMENT_REQUESTS,
       accessRequests: INITIAL_ACCESS_REQUESTS,
       leaveDelegation: INITIAL_LEAVE_DELEGATION,
+      adoptionMappings: INITIAL_SYSTEM_ADOPTION_MAPPINGS,
+      adoptionPolicy: INITIAL_ADOPTION_POLICY,
+      adoptionRecords: INITIAL_ADOPTION_RECORDS,
+      pendingAdoptAccountId: null,
       provisioningJobs: INITIAL_PROVISIONING_JOBS,
       importRuns: INITIAL_IMPORT_RUNS,
       emailNotifications: INITIAL_EMAIL_NOTIFICATIONS,

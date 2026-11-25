@@ -727,6 +727,42 @@ export function PersonInspectorDrawer({ person, onClose }: PersonInspectorDrawer
                       </div>
                     </div>
 
+                    {person.provenance && (
+                      <div className="rounded-2xl border border-sky-200/80 bg-sky-50/40 p-4 text-xs">
+                        <div className="font-mono text-[10px] font-bold tracking-wider text-[#0284C7] uppercase">
+                          Identity Adoption Provenance
+                        </div>
+                        <div className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          <div>
+                            <span className="block font-mono text-[9px] text-slate-400 uppercase">Creation Method</span>
+                            <span className="font-semibold text-[#0F172A]">{person.provenance.creationMethod}</span>
+                          </div>
+                          <div>
+                            <span className="block font-mono text-[9px] text-slate-400 uppercase">Approval Reference</span>
+                            <span className="font-mono font-semibold text-[#0284C7]">{person.provenance.approvalReference}</span>
+                          </div>
+                          <div>
+                            <span className="block font-mono text-[9px] text-slate-400 uppercase">Original Account &amp; Source</span>
+                            <span className="font-mono font-semibold text-[#0F172A]">
+                              {person.provenance.originalAccountId} ({person.provenance.accountCorrelationSource})
+                            </span>
+                          </div>
+                          <div>
+                            <span className="block font-mono text-[9px] text-slate-400 uppercase">Authoritative Source</span>
+                            <span className="font-semibold text-[#0F172A]">{person.provenance.authoritativeSource}</span>
+                          </div>
+                          <div>
+                            <span className="block font-mono text-[9px] text-slate-400 uppercase">Adopted By</span>
+                            <span className="font-medium text-slate-700">{person.provenance.adoptedBy}</span>
+                          </div>
+                          <div>
+                            <span className="block font-mono text-[9px] text-slate-400 uppercase">Adoption Date</span>
+                            <span className="font-mono text-slate-700">{person.provenance.adoptionDate}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="rounded-2xl border border-slate-200 bg-[#F8FAFC] p-4">
                       <div className="font-mono text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
                         Execute Live Identity Process++ Actions
