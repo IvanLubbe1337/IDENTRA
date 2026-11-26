@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Eye,
   KeyRound,
+  Lock,
   RefreshCw,
   ShieldAlert,
   ShieldCheck,
@@ -12,6 +13,7 @@ import {
   UserPlus,
   X,
 } from 'lucide-react';
+import { maskSensitiveValue } from '@/data/demoSampleData';
 import { Dialog } from '@/components/ui/Primitives';
 import { useDemoStore } from '@/store/useDemoStore';
 import { PersonInspectorDrawer } from '@/demo/views/PersonInspectorDrawer';
@@ -26,12 +28,29 @@ const EMERGENCY_REASONS = [
 
 export function PeopleView() {
   const people = useDemoStore((s) => s.people);
+  const schemaObjects = useDemoStore((s) => s.schemaObjects);
   const searchQuery = useDemoStore((s) => s.searchQuery);
   const selectedPersonId = useDemoStore((s) => s.selectedPersonId);
   const setSelectedPersonId = useDemoStore((s) => s.setSelectedPersonId);
+  const setActiveSection = useDemoStore((s) => s.setActiveSection);
   const onboardNewJoiner = useDemoStore((s) => s.onboardNewJoiner);
   const openOnboardingTab = useDemoStore((s) => s.openOnboardingTab);
   const emergencyDeactivatePerson = useDemoStore((s) => s.emergencyDeactivatePerson);
+
+  const identitySchema = schemaObjects.find((o) => o.id === 'obj-identity');
+  const sensitiveProps = (identitySchema?.properties ?? []).filter((p) => p.sensitive);
+  const getIdentityProp = (key: string) =>
+    identitySchema?.properties.find((p) => p.key === key);
+  const formatPortalField = (key: string, value: string) => {
+    const prop = getIdentityProp(key);
+    if (prop?.sensitive) {
+      return {
+        display: maskSensitiveValue(value, prop.maskPattern),
+        masked: true,
+      };
+    }
+    return { display: value, masked: false };
+  };
 
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [confirmDeactivateId, setConfirmDeactivateId] = useState<string | null>(null);
@@ -86,23 +105,38 @@ export function PeopleView() {
         </div>
       </div>
 
-      {/* Filter pills */}
-      <div className="flex flex-wrap gap-1.5">
-        {['All', 'Active', 'Joiner', 'Mover', 'Leaver', 'Suspended', 'Deactivated'].map((st) => (
+      {/* Filter pills & Active Sensitive Field Masking Indicator */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-1.5">
+          {['All', 'Active', 'Joiner', 'Mover', 'Leaver', 'Suspended', 'Deactivated'].map((st) => (
+            <button
+              key={st}
+              type="button"
+              onClick={() => setStatusFilter(st)}
+              className={cn(
+                'cursor-pointer rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                statusFilter === st
+                  ? 'border-[#0EA5E9] bg-sky-50 font-semibold text-[#0284C7]'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+              )}
+            >
+              {st}
+            </button>
+          ))}
+        </div>
+
+        {sensitiveProps.length > 0 && (
           <button
-            key={st}
             type="button"
-            onClick={() => setStatusFilter(st)}
-            className={cn(
-              'cursor-pointer rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-              statusFilter === st
-                ? 'border-[#0EA5E9] bg-sky-50 font-semibold text-[#0284C7]'
-                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-            )}
+            onClick={() => setActiveSection('configuration')}
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 font-mono text-[10px] font-semibold text-amber-800 hover:bg-amber-100"
           >
-            {st}
+            <Lock className="h-3 w-3 text-amber-600" />
+            <span>
+              {sensitiveProps.length} Sensitive Identity Field{sensitiveProps.length === 1 ? '' : 's'} Masked
+            </span>
           </button>
-        ))}
+        )}
       </div>
 
       {/* Clean Full-Width People Directory Table */}
@@ -132,15 +166,41 @@ export function PeopleView() {
                     )}
                   >
                     <td className="px-4 py-3.5">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-[#0F172A]">{person.name}</span>
-                        <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600">
-                          {person.employeeNumber}
-                        </span>
-                      </div>
-                      <div className="mt-0.5 font-mono text-[10px] text-slate-500">
-                        {person.email}
-                      </div>
+                      {(() => {
+                        const empField = formatPortalField('employeeNumber', person.employeeNumber);
+                        const emailField = formatPortalField('email', person.email);
+                        const fnameField = formatPortalField('firstName', person.firstName);
+                        const lnameField = formatPortalField('lastName', person.lastName);
+                        return (
+                          <>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-[#0F172A]">
+                                {fnameField.display} {lnameField.display}
+                              </span>
+                              <span
+                                className={cn(
+                                  'inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[10px]',
+                                  empField.masked
+                                    ? 'bg-amber-50 font-bold text-amber-800 ring-1 ring-amber-200'
+                                    : 'bg-slate-100 text-slate-600'
+                                )}
+                              >
+                                {empField.masked && <Lock className="h-2.5 w-2.5 text-amber-600" />}
+                                {empField.display}
+                              </span>
+                            </div>
+                            <div
+                              className={cn(
+                                'mt-0.5 inline-flex items-center gap-1 font-mono text-[10px]',
+                                emailField.masked ? 'font-semibold text-amber-800' : 'text-slate-500'
+                              )}
+                            >
+                              {emailField.masked && <Lock className="h-2.5 w-2.5 text-amber-600" />}
+                              <span>{emailField.display}</span>
+                            </div>
+                          </>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3.5 text-slate-700">
                       <div className="font-medium text-[#0F172A]">{person.orgUnitName}</div>

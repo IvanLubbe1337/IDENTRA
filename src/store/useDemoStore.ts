@@ -7,6 +7,7 @@ import {
   INITIAL_ADOPTION_POLICY,
   INITIAL_ADOPTION_RECORDS,
   INITIAL_CONTRACTOR_REQUESTS,
+  INITIAL_CUSTOM_WORKFLOWS,
   INITIAL_DEMO_ACCOUNTS,
   INITIAL_DEMO_APPS,
   INITIAL_DEMO_AUDIT,
@@ -29,6 +30,7 @@ import {
   INITIAL_PLATFORM_CONFIG,
   INITIAL_PROVISIONING_JOBS,
   INITIAL_ROLE_OPTIMISATIONS,
+  INITIAL_SCHEMA_OBJECTS,
   INITIAL_SYSTEM_ADOPTION_MAPPINGS,
   buildBrandedIdentraEmailHtml,
   evaluateBirthrightMatches,
@@ -42,6 +44,7 @@ import {
   type DemoAuditEntry,
   type DemoBirthrightRule,
   type DemoContractorOnboardingRequest,
+  type DemoCustomWorkflow,
   type DemoEmailNotification,
   type DemoEmptyEntitlement,
   type DemoEntitlement,
@@ -57,6 +60,8 @@ import {
   type DemoReviewItem,
   type DemoRole,
   type DemoRoleOptimisationItem,
+  type DemoSchemaObject,
+  type DemoSchemaProperty,
   type DemoSectionId,
   type DemoTargetAccount,
   type GovernanceControlDomain,
@@ -117,6 +122,8 @@ interface DemoStore {
   importRuns: DemoImportRun[];
   emailNotifications: DemoEmailNotification[];
   platformConfig: PlatformConfig;
+  schemaObjects: DemoSchemaObject[];
+  customWorkflows: DemoCustomWorkflow[];
   auditLog: DemoAuditEntry[];
 
   setActiveSection: (section: DemoSectionId) => void;
@@ -260,6 +267,34 @@ interface DemoStore {
   updateProvisioningConfig: (patch: Partial<PlatformConfig['provisioning']>) => void;
   updateGovernanceConfig: (patch: Partial<PlatformConfig['governance']>) => void;
 
+  // Data Objects, Schema Properties & Sensitive Field Masking actions
+  createSchemaObject: (input: {
+    name: string;
+    apiName: string;
+    category: DemoSchemaObject['category'];
+    description: string;
+    initialProperties?: Omit<DemoSchemaProperty, 'id'>[];
+  }) => string;
+  addSchemaProperty: (
+    objectId: string,
+    prop: Omit<DemoSchemaProperty, 'id'>
+  ) => void;
+  updateSchemaProperty: (
+    objectId: string,
+    propertyId: string,
+    patch: Partial<Omit<DemoSchemaProperty, 'id'>>
+  ) => void;
+  deleteSchemaProperty: (objectId: string, propertyId: string) => void;
+  logSensitiveFieldReveal: (identityName: string, fieldLabel: string) => void;
+
+  // Custom Reference-Object Workflows actions
+  createCustomWorkflow: (
+    input: Omit<DemoCustomWorkflow, 'id' | 'code' | 'createdAt' | 'lastSimulatedAt'>
+  ) => void;
+  toggleCustomWorkflowStatus: (workflowId: string) => void;
+  deleteCustomWorkflow: (workflowId: string) => void;
+  simulateCustomWorkflow: (workflowId: string, targetPersonId: string) => void;
+
   // Email Notification Log actions
   retryEmailNotification: (emailId: string) => void;
   resendEmailNotification: (emailId: string) => void;
@@ -349,6 +384,8 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
   importRuns: INITIAL_IMPORT_RUNS,
   emailNotifications: INITIAL_EMAIL_NOTIFICATIONS,
   platformConfig: INITIAL_PLATFORM_CONFIG,
+  schemaObjects: INITIAL_SCHEMA_OBJECTS,
+  customWorkflows: INITIAL_CUSTOM_WORKFLOWS,
   auditLog: INITIAL_DEMO_AUDIT,
 
   setActiveSection: (section) => set({ activeSection: section }),
@@ -2943,6 +2980,294 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
     }));
   },
 
+  createSchemaObject: (input) => {
+    const id = `obj-custom-${Date.now()}`;
+    const cleanApi =
+      input.apiName
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_]+/g, '_')
+        .replace(/^_+|_+$/g, '') || `custom_obj_${get().schemaObjects.length + 1}`;
+    const code = `OBJ-${cleanApi.toUpperCase().slice(0, 14)}`;
+    const stamp = timeNow();
+
+    const defaultProps: DemoSchemaProperty[] =
+      input.initialProperties && input.initialProperties.length > 0
+        ? input.initialProperties.map((p, i) => ({ ...p, id: `prop-${Date.now()}-${i}` }))
+        : [
+            {
+              id: `prop-${Date.now()}-0`,
+              key: 'name',
+              label: 'Object Name',
+              type: 'String',
+              required: true,
+              unique: true,
+              sensitive: false,
+              maskPattern: 'Full Mask (••••••••)',
+              systemProperty: false,
+              defaultSampleValue: `Sample ${input.name.trim()}`,
+              description: 'Primary display name.',
+            },
+            {
+              id: `prop-${Date.now()}-1`,
+              key: 'ownerIdentity',
+              label: 'Accountable Owner (Identity)',
+              type: 'Reference (Identity)',
+              referenceTargetObjectId: 'obj-identity',
+              required: true,
+              unique: false,
+              sensitive: false,
+              maskPattern: 'Full Mask (••••••••)',
+              systemProperty: false,
+              defaultSampleValue: 'Claire Vance',
+              description: 'Reference to an Identity record usable in custom workflows.',
+            },
+          ];
+
+    const newObj: DemoSchemaObject = {
+      id,
+      code,
+      name: input.name.trim(),
+      apiName: cleanApi,
+      category: input.category,
+      description: input.description.trim() || `Custom governed object "${input.name.trim()}".`,
+      recordCount: 0,
+      properties: defaultProps,
+    };
+
+    set((s) => ({
+      schemaObjects: [...s.schemaObjects, newObj],
+      toastMessage: `Created new schema object "${newObj.name}" (${newObj.code}) with ${defaultProps.length} properties.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'Schema Studio',
+          processTag: 'OBJ-NEW',
+          tone: 'emerald',
+          action: `Created new ${newObj.category} "${newObj.name}" (${newObj.apiName})`,
+          target: newObj.code,
+        },
+        ...s.auditLog,
+      ],
+    }));
+
+    return id;
+  },
+
+  addSchemaProperty: (objectId, prop) => {
+    const obj = get().schemaObjects.find((o) => o.id === objectId);
+    if (!obj) return;
+
+    const cleanKey =
+      prop.key
+        .trim()
+        .replace(/[^a-zA-Z0-9_]/g, '') ||
+      prop.label
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+(.)/g, (_, c: string) => c.toUpperCase())
+        .replace(/[^a-zA-Z0-9]/g, '');
+
+    const newProp: DemoSchemaProperty = {
+      ...prop,
+      id: `prop-${Date.now()}`,
+      key: cleanKey,
+      label: prop.label.trim() || cleanKey,
+      systemProperty: false,
+    };
+    const stamp = timeNow();
+
+    set((s) => ({
+      schemaObjects: s.schemaObjects.map((o) =>
+        o.id === objectId ? { ...o, properties: [...o.properties, newProp] } : o
+      ),
+      toastMessage: `Added property "${newProp.label}" (${newProp.type}${newProp.sensitive ? ' · Sensitive Masked' : ''}) to ${obj.name}.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'Schema Studio',
+          processTag: 'PROP-ADD',
+          tone: newProp.sensitive ? 'amber' : 'sky',
+          action: `Added ${newProp.type} property "${newProp.key}"${newProp.sensitive ? ' [SENSITIVE MASKED]' : ''}`,
+          target: obj.name,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  updateSchemaProperty: (objectId, propertyId, patch) => {
+    const obj = get().schemaObjects.find((o) => o.id === objectId);
+    const prop = obj?.properties.find((p) => p.id === propertyId);
+    if (!obj || !prop) return;
+    const stamp = timeNow();
+
+    const updatedProp: DemoSchemaProperty = { ...prop, ...patch };
+    const sensitivityChanged =
+      patch.sensitive !== undefined && patch.sensitive !== prop.sensitive;
+    const typeChanged = patch.type !== undefined && patch.type !== prop.type;
+
+    set((s) => ({
+      schemaObjects: s.schemaObjects.map((o) =>
+        o.id === objectId
+          ? {
+              ...o,
+              properties: o.properties.map((p) =>
+                p.id === propertyId ? updatedProp : p
+              ),
+            }
+          : o
+      ),
+      toastMessage: sensitivityChanged
+        ? `${updatedProp.sensitive ? 'Enabled Sensitive Field masking' : 'Disabled masking'} on ${obj.name}.${updatedProp.label} across portal views.`
+        : typeChanged
+          ? `Updated ${obj.name}.${updatedProp.label} data type to ${updatedProp.type}.`
+          : `Updated property "${updatedProp.label}" on ${obj.name}.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'Schema Studio',
+          processTag: sensitivityChanged ? 'SENS-CFG' : 'PROP-UPD',
+          tone: sensitivityChanged && updatedProp.sensitive ? 'amber' : 'sky',
+          action: sensitivityChanged
+            ? `${updatedProp.sensitive ? 'Marked' : 'Unmarked'} "${updatedProp.key}" as Sensitive (${updatedProp.maskPattern})`
+            : `Updated "${updatedProp.key}" → type: ${updatedProp.type}, required: ${updatedProp.required}`,
+          target: obj.name,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  deleteSchemaProperty: (objectId, propertyId) => {
+    const obj = get().schemaObjects.find((o) => o.id === objectId);
+    const prop = obj?.properties.find((p) => p.id === propertyId);
+    if (!obj || !prop || prop.systemProperty) return;
+    const stamp = timeNow();
+
+    set((s) => ({
+      schemaObjects: s.schemaObjects.map((o) =>
+        o.id === objectId
+          ? { ...o, properties: o.properties.filter((p) => p.id !== propertyId) }
+          : o
+      ),
+      toastMessage: `Removed custom property "${prop.label}" from ${obj.name}.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'Schema Studio',
+          processTag: 'PROP-DEL',
+          tone: 'amber',
+          action: `Removed custom property "${prop.key}"`,
+          target: obj.name,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  logSensitiveFieldReveal: (identityName, fieldLabel) => {
+    const stamp = timeNow();
+    set((s) => ({
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'Ivan Lubbe (Portal Admin)',
+          processTag: 'SENS-VIEW',
+          tone: 'amber',
+          action: `Temporarily revealed masked sensitive field "${fieldLabel}"`,
+          target: identityName,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  createCustomWorkflow: (input) => {
+    const nextNum = get().customWorkflows.length + 1;
+    const code = `WF-CUST-${String(nextNum).padStart(3, '0')}`;
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const stamp = timeNow();
+    const srcObj = get().schemaObjects.find((o) => o.id === input.sourceObjectId);
+
+    const newWorkflow: DemoCustomWorkflow = {
+      ...input,
+      id: `cwf-${Date.now()}`,
+      code,
+      createdAt: todayIso,
+    };
+
+    set((s) => ({
+      customWorkflows: [newWorkflow, ...s.customWorkflows],
+      toastMessage: `Created custom workflow ${code} ("${newWorkflow.name}") bound to ${srcObj?.name ?? 'Object'} with ${newWorkflow.stages.length} stage(s).`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'Workflow Designer',
+          processTag: 'WF-NEW',
+          tone: 'emerald',
+          action: `Created custom reference workflow ${code} (${newWorkflow.triggerEvent} · ${newWorkflow.stages.length} stages)`,
+          target: newWorkflow.name,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  toggleCustomWorkflowStatus: (workflowId) => {
+    const wf = get().customWorkflows.find((w) => w.id === workflowId);
+    if (!wf) return;
+    const nextStatus: DemoCustomWorkflow['status'] =
+      wf.status === 'Active' ? 'Paused' : 'Active';
+    set((s) => ({
+      customWorkflows: s.customWorkflows.map((w) =>
+        w.id === workflowId ? { ...w, status: nextStatus } : w
+      ),
+      toastMessage: `${nextStatus === 'Active' ? 'Activated' : 'Paused'} custom workflow ${wf.code} (${wf.name}).`,
+    }));
+  },
+
+  deleteCustomWorkflow: (workflowId) => {
+    const wf = get().customWorkflows.find((w) => w.id === workflowId);
+    if (!wf) return;
+    set((s) => ({
+      customWorkflows: s.customWorkflows.filter((w) => w.id !== workflowId),
+      toastMessage: `Deleted custom workflow ${wf.code} (${wf.name}).`,
+    }));
+  },
+
+  simulateCustomWorkflow: (workflowId, targetPersonId) => {
+    const wf = get().customWorkflows.find((w) => w.id === workflowId);
+    const person = get().people.find((p) => p.id === targetPersonId);
+    if (!wf || !person) return;
+    const stamp = timeNow();
+
+    set((s) => ({
+      customWorkflows: s.customWorkflows.map((w) =>
+        w.id === workflowId ? { ...w, lastSimulatedAt: `Today · ${stamp}` } : w
+      ),
+      toastMessage: `Simulated ${wf.code} against ${person.name} — resolved ${wf.stages.length} Identity reference stage(s).`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'Workflow Simulator',
+          processTag: 'WF-SIM',
+          tone: 'sky',
+          action: `Simulated ${wf.code} (${wf.name}) resolving ${wf.stages.map((st) => st.referenceObjectPath).join(' → ')}`,
+          target: person.name,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
   retryEmailNotification: (emailId) => {
     const email = get().emailNotifications.find((e) => e.id === emailId);
     if (!email) return;
@@ -4405,6 +4730,8 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
       importRuns: INITIAL_IMPORT_RUNS,
       emailNotifications: INITIAL_EMAIL_NOTIFICATIONS,
       platformConfig: INITIAL_PLATFORM_CONFIG,
+      schemaObjects: INITIAL_SCHEMA_OBJECTS,
+      customWorkflows: INITIAL_CUSTOM_WORKFLOWS,
       auditLog: INITIAL_DEMO_AUDIT,
       selectedPersonId: null,
       toastMessage: 'Reset all IDENTRA proof-of-concept sample data to initial baseline.',

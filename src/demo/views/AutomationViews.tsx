@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
+  ArrowRight,
+  ArrowUpRight,
   Bot,
+  GitBranch,
+  Link2,
   Play,
   ShieldAlert,
   Terminal,
@@ -101,6 +105,9 @@ export function LifecycleView() {
 }
 
 export function WorkflowsView() {
+  const customWorkflows = useDemoStore((s) => s.customWorkflows);
+  const schemaObjects = useDemoStore((s) => s.schemaObjects);
+  const setActiveSection = useDemoStore((s) => s.setActiveSection);
   const [selectedId, setSelectedId] = useState(WORKFLOW_SIMULATIONS[0].id);
   const [runCount, setRunCount] = useState(1);
 
@@ -183,6 +190,78 @@ export function WorkflowsView() {
               </motion.div>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* Custom Reference-Object Workflows Configured in Platform Configuration */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3.5">
+          <div>
+            <div className="flex items-center gap-2 font-heading text-sm font-bold text-[#0F172A]">
+              <GitBranch className="h-4 w-4 text-[#0EA5E9]" />
+              <span>Custom Reference-Object Workflows ({customWorkflows.length})</span>
+            </div>
+            <p className="text-xs text-slate-500">
+              Admin-defined workflows resolving Identity Reference properties across Core and Custom Objects.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveSection('configuration')}
+            className="inline-flex cursor-pointer items-center gap-1 rounded-xl border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-[#0284C7] hover:bg-sky-100"
+          >
+            <span>Configure in Schema &amp; Workflow Studio</span>
+            <ArrowUpRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        <div className="mt-3.5 space-y-2.5">
+          {customWorkflows.map((wf) => {
+            const srcObj = schemaObjects.find((o) => o.id === wf.sourceObjectId);
+            return (
+              <div
+                key={wf.id}
+                className="rounded-xl border border-slate-200/80 bg-[#FBFDFF] p-3.5 text-xs"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-slate-700">
+                      {wf.code}
+                    </span>
+                    <span className="font-semibold text-[#0F172A]">{wf.name}</span>
+                    <span className="rounded-full bg-sky-50 px-2 py-0.5 font-mono text-[10px] text-[#0284C7]">
+                      {srcObj?.name ?? wf.sourceObjectId} · {wf.triggerEvent}
+                    </span>
+                  </div>
+                  <span
+                    className={cn(
+                      'rounded-full px-2 py-0.5 font-mono text-[10px] font-semibold',
+                      wf.status === 'Active'
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : 'bg-amber-50 text-amber-700'
+                    )}
+                  >
+                    {wf.status}
+                  </span>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  {wf.stages.map((st, idx) => (
+                    <div key={st.id} className="inline-flex items-center gap-1.5">
+                      <span className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 font-mono text-[10px] text-slate-700">
+                        <Link2 className="h-2.5 w-2.5 text-[#0EA5E9]" />
+                        <span>
+                          {st.stepOrder}. {st.name} ({st.referenceObjectPath})
+                        </span>
+                      </span>
+                      {idx < wf.stages.length - 1 && (
+                        <ArrowRight className="h-3 w-3 text-slate-300" />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

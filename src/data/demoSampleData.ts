@@ -5575,3 +5575,615 @@ export const INITIAL_EMPTY_ENTITLEMENTS: DemoEmptyEntitlement[] = [
     governanceViolationId: 'gv-emp-6',
   },
 ];
+
+/* -------------------------------------------------------------------------- */
+/* Configurable Data Objects, Properties, Types & Sensitive Field Masking     */
+/* -------------------------------------------------------------------------- */
+
+export type SchemaPropertyType =
+  | 'String'
+  | 'Integer'
+  | 'Boolean'
+  | 'Date'
+  | 'Email'
+  | 'Enum'
+  | 'Reference (Identity)'
+  | 'Reference (Object)'
+  | 'Multi-Value String'
+  | 'Encrypted Secret';
+
+export type SensitiveMaskPattern =
+  | 'Full Mask (••••••••)'
+  | 'Show Last 4 (••••1234)'
+  | 'Partial Email (s***@domain)';
+
+export interface DemoSchemaProperty {
+  id: string;
+  key: string;
+  label: string;
+  type: SchemaPropertyType;
+  referenceTargetObjectId?: string;
+  required: boolean;
+  unique: boolean;
+  sensitive: boolean;
+  maskPattern: SensitiveMaskPattern;
+  systemProperty?: boolean;
+  defaultSampleValue?: string;
+  description?: string;
+}
+
+export interface DemoSchemaObject {
+  id: string;
+  code: string;
+  name: string;
+  apiName: string;
+  category: 'Core System Object' | 'Reference Object' | 'Custom Object';
+  description: string;
+  recordCount: number;
+  properties: DemoSchemaProperty[];
+}
+
+export function maskSensitiveValue(
+  rawValue: string | null | undefined,
+  pattern: SensitiveMaskPattern = 'Full Mask (••••••••)'
+): string {
+  const val = String(rawValue ?? '').trim();
+  if (!val) return '••••••••';
+
+  if (pattern === 'Partial Email (s***@domain)' && val.includes('@')) {
+    const [local, domain] = val.split('@');
+    const prefix = local.slice(0, 1) || '*';
+    return `${prefix}••••@${domain}`;
+  }
+
+  if (pattern === 'Show Last 4 (••••1234)') {
+    if (val.length <= 4) return '••••';
+    return `••••••••${val.slice(-4)}`;
+  }
+
+  return '••••••••••••';
+}
+
+export function getIdentityExtendedSampleValue(
+  person: DemoPerson,
+  key: string,
+  fallback?: string
+): string {
+  const numSeed =
+    person.employeeNumber.replace(/\D/g, '').slice(-4).padStart(4, '4') || '8421';
+  if (key === 'nationalId') return `900412582${numSeed}`;
+  if (key === 'privateMobile') return `+27 82 554 ${numSeed}`;
+  if (key === 'taxNumber') return `ZA-TIN-0491${numSeed}`;
+  if (key === 'securityClearance') return person.riskScore < 25 ? 'Tier-2 Verified' : 'Standard';
+  return fallback?.trim() || `Configured (${key})`;
+}
+
+export const INITIAL_SCHEMA_OBJECTS: DemoSchemaObject[] = [
+  {
+    id: 'obj-identity',
+    code: 'OBJ-IDENTITY',
+    name: 'Identity (Person)',
+    apiName: 'identity',
+    category: 'Core System Object',
+    description:
+      'Authoritative human identity master record synchronized from HRIS, Contractor Onboarding, or Orphaned Account Adoption.',
+    recordCount: 8421,
+    properties: [
+      {
+        id: 'prop-id-fname',
+        key: 'firstName',
+        label: 'First Name',
+        type: 'String',
+        required: true,
+        unique: false,
+        sensitive: false,
+        maskPattern: 'Full Mask (••••••••)',
+        systemProperty: true,
+        defaultSampleValue: 'Sarah',
+        description: 'Legal or preferred given name.',
+      },
+      {
+        id: 'prop-id-lname',
+        key: 'lastName',
+        label: 'Last Name',
+        type: 'String',
+        required: true,
+        unique: false,
+        sensitive: false,
+        maskPattern: 'Full Mask (••••••••)',
+        systemProperty: true,
+        defaultSampleValue: 'Mitchell',
+        description: 'Legal family surname.',
+      },
+      {
+        id: 'prop-id-empnum',
+        key: 'employeeNumber',
+        label: 'Employee Number',
+        type: 'String',
+        required: true,
+        unique: true,
+        sensitive: false,
+        maskPattern: 'Show Last 4 (••••1234)',
+        systemProperty: true,
+        defaultSampleValue: 'EMP-10841',
+        description: 'Unique HRIS employee or contractor reference.',
+      },
+      {
+        id: 'prop-id-email',
+        key: 'email',
+        label: 'Primary Email',
+        type: 'Email',
+        required: true,
+        unique: true,
+        sensitive: false,
+        maskPattern: 'Partial Email (s***@domain)',
+        systemProperty: true,
+        defaultSampleValue: 'sarah.mitchell@identra-corp.io',
+        description: 'Primary corporate email address.',
+      },
+      {
+        id: 'prop-id-upn',
+        key: 'upn',
+        label: 'User Principal Name (UPN)',
+        type: 'Email',
+        required: true,
+        unique: true,
+        sensitive: false,
+        maskPattern: 'Partial Email (s***@domain)',
+        systemProperty: true,
+        defaultSampleValue: 'smitchell@corp.identra.net',
+        description: 'Directory authentication identifier.',
+      },
+      {
+        id: 'prop-id-sam',
+        key: 'samAccountName',
+        label: 'SAM Account Name',
+        type: 'String',
+        required: true,
+        unique: true,
+        sensitive: false,
+        maskPattern: 'Full Mask (••••••••)',
+        systemProperty: true,
+        defaultSampleValue: 'smitchell',
+        description: 'Active Directory logon reference.',
+      },
+      {
+        id: 'prop-id-manager',
+        key: 'manager',
+        label: 'Line Manager / Sponsor',
+        type: 'Reference (Identity)',
+        referenceTargetObjectId: 'obj-identity',
+        required: true,
+        unique: false,
+        sensitive: false,
+        maskPattern: 'Full Mask (••••••••)',
+        systemProperty: true,
+        defaultSampleValue: 'Claire Vance',
+        description: 'Identity reference used for Manager Approval & Escalation workflows.',
+      },
+      {
+        id: 'prop-id-national',
+        key: 'nationalId',
+        label: 'National ID / Passport Number',
+        type: 'Encrypted Secret',
+        required: false,
+        unique: true,
+        sensitive: true,
+        maskPattern: 'Show Last 4 (••••1234)',
+        systemProperty: false,
+        defaultSampleValue: '9004125820841',
+        description: 'POPIA/GDPR regulated national identifier — masked across the portal by default.',
+      },
+      {
+        id: 'prop-id-mobile',
+        key: 'privateMobile',
+        label: 'Private MFA Mobile Number',
+        type: 'String',
+        required: false,
+        unique: false,
+        sensitive: true,
+        maskPattern: 'Show Last 4 (••••1234)',
+        systemProperty: false,
+        defaultSampleValue: '+27 82 554 0841',
+        description: 'Personal mobile number for out-of-band MFA recovery — hidden from clear text.',
+      },
+      {
+        id: 'prop-id-hrstart',
+        key: 'hrStartDate',
+        label: 'HR Start Date',
+        type: 'Date',
+        required: true,
+        unique: false,
+        sensitive: false,
+        maskPattern: 'Full Mask (••••••••)',
+        systemProperty: true,
+        defaultSampleValue: '2026-11-23',
+        description: 'Effective Joiner start date.',
+      },
+    ],
+  },
+  {
+    id: 'obj-application',
+    code: 'OBJ-APPLICATION',
+    name: 'Connected Application',
+    apiName: 'application',
+    category: 'Core System Object',
+    description:
+      'Connected enterprise system or target directory managed by IDENTRA connectors and Governance Controls.',
+    recordCount: 126,
+    properties: [
+      {
+        id: 'prop-app-name',
+        key: 'name',
+        label: 'Application Name',
+        type: 'String',
+        required: true,
+        unique: true,
+        sensitive: false,
+        maskPattern: 'Full Mask (••••••••)',
+        systemProperty: true,
+        defaultSampleValue: 'SAP S/4HANA Finance',
+      },
+      {
+        id: 'prop-app-owner',
+        key: 'applicationOwner',
+        label: 'Application Owner',
+        type: 'Reference (Identity)',
+        referenceTargetObjectId: 'obj-identity',
+        required: true,
+        unique: false,
+        sensitive: false,
+        maskPattern: 'Full Mask (••••••••)',
+        systemProperty: true,
+        defaultSampleValue: 'David Chen',
+        description: 'Accountable business owner (Identity reference) for Application Owner Approvals.',
+      },
+      {
+        id: 'prop-app-tech-owner',
+        key: 'technicalSteward',
+        label: 'Technical Steward',
+        type: 'Reference (Identity)',
+        referenceTargetObjectId: 'obj-identity',
+        required: false,
+        unique: false,
+        sensitive: false,
+        maskPattern: 'Full Mask (••••••••)',
+        systemProperty: false,
+        defaultSampleValue: 'Priya Nair',
+        description: 'Secondary technical identity reference for connector operations.',
+      },
+      {
+        id: 'prop-app-tier',
+        key: 'tier',
+        label: 'Criticality Tier',
+        type: 'Enum',
+        required: true,
+        unique: false,
+        sensitive: false,
+        maskPattern: 'Full Mask (••••••••)',
+        systemProperty: true,
+        defaultSampleValue: 'Tier-0',
+      },
+      {
+        id: 'prop-app-secret',
+        key: 'connectorClientSecret',
+        label: 'Connector Client Secret',
+        type: 'Encrypted Secret',
+        required: true,
+        unique: false,
+        sensitive: true,
+        maskPattern: 'Full Mask (••••••••)',
+        systemProperty: true,
+        defaultSampleValue: 'scim_live_94k2f8a19c0d',
+        description: 'Encrypted connector API credential.',
+      },
+    ],
+  },
+  {
+    id: 'obj-entitlement',
+    code: 'OBJ-ENTITLEMENT',
+    name: 'Entitlement',
+    apiName: 'entitlement',
+    category: 'Core System Object',
+    description:
+      'Fine-grained target-system permission, AD group, SAP role, or cloud policy governed in the catalog.',
+    recordCount: 12480,
+    properties: [
+      {
+        id: 'prop-ent-name',
+        key: 'name',
+        label: 'Entitlement Name',
+        type: 'String',
+        required: true,
+        unique: true,
+        sensitive: false,
+        maskPattern: 'Full Mask (••••••••)',
+        systemProperty: true,
+        defaultSampleValue: 'SAP:FI_AP_PAYMENT_RELEASE',
+      },
+      {
+        id: 'prop-ent-owner',
+        key: 'entitlementOwner',
+        label: 'Entitlement Owner',
+        type: 'Reference (Identity)',
+        referenceTargetObjectId: 'obj-identity',
+        required: true,
+        unique: false,
+        sensitive: false,
+        maskPattern: 'Full Mask (••••••••)',
+        systemProperty: true,
+        defaultSampleValue: 'Claire Vance',
+        description: 'Identity reference required by GA-CTRL-01 and Entitlement Owner approval workflows.',
+      },
+      {
+        id: 'prop-ent-app',
+        key: 'applicationRef',
+        label: 'Parent Application',
+        type: 'Reference (Object)',
+        referenceTargetObjectId: 'obj-application',
+        required: true,
+        unique: false,
+        sensitive: false,
+        maskPattern: 'Full Mask (••••••••)',
+        systemProperty: true,
+        defaultSampleValue: 'SAP S/4HANA Finance',
+      },
+      {
+        id: 'prop-ent-priv',
+        key: 'isPrivileged',
+        label: 'Privileged Access Flag',
+        type: 'Boolean',
+        required: true,
+        unique: false,
+        sensitive: false,
+        maskPattern: 'Full Mask (••••••••)',
+        systemProperty: true,
+        defaultSampleValue: 'true',
+      },
+    ],
+  },
+  {
+    id: 'obj-department',
+    code: 'OBJ-DEPARTMENT',
+    name: 'Department / Cost Center',
+    apiName: 'department',
+    category: 'Reference Object',
+    description:
+      'Organizational reference object linking cost centers, departments, and budget approvers.',
+    recordCount: 42,
+    properties: [
+      {
+        id: 'prop-dept-code',
+        key: 'costCenterCode',
+        label: 'Cost Center Code',
+        type: 'String',
+        required: true,
+        unique: true,
+        sensitive: false,
+        maskPattern: 'Full Mask (••••••••)',
+        systemProperty: true,
+        defaultSampleValue: 'CC-4100-FIN',
+      },
+      {
+        id: 'prop-dept-head',
+        key: 'departmentHead',
+        label: 'Department Head',
+        type: 'Reference (Identity)',
+        referenceTargetObjectId: 'obj-identity',
+        required: true,
+        unique: false,
+        sensitive: false,
+        maskPattern: 'Full Mask (••••••••)',
+        systemProperty: true,
+        defaultSampleValue: 'David Chen',
+        description: 'Identity reference for department-level sign-off workflows.',
+      },
+      {
+        id: 'prop-dept-delegate',
+        key: 'budgetApprover',
+        label: 'Budget / License Approver',
+        type: 'Reference (Identity)',
+        referenceTargetObjectId: 'obj-identity',
+        required: false,
+        unique: false,
+        sensitive: false,
+        maskPattern: 'Full Mask (••••••••)',
+        systemProperty: false,
+        defaultSampleValue: 'Claire Vance',
+        description: 'Identity reference used for high-cost ZAR license approvals.',
+      },
+    ],
+  },
+];
+
+/* -------------------------------------------------------------------------- */
+/* Custom Workflows Targeting Reference Objects (Identities & Custom Objects) */
+/* -------------------------------------------------------------------------- */
+
+export type CustomWorkflowTrigger =
+  | 'On Create'
+  | 'On Attribute Change'
+  | 'On Reference Change'
+  | 'On Access Request'
+  | 'On Expiry Approaching'
+  | 'Scheduled Daily';
+
+export interface CustomWorkflowCondition {
+  id: string;
+  propertyKey: string;
+  operator: 'equals' | 'not_equals' | 'contains' | 'changed' | 'is_not_empty';
+  value: string;
+}
+
+export interface CustomWorkflowStage {
+  id: string;
+  stepOrder: number;
+  name: string;
+  stageKind: 'Approval' | 'Notification' | 'Provisioning Action' | 'Governance Check';
+  resolverMode: 'Reference Property (Identity)' | 'Specific Identity' | 'Dynamic Role / Group';
+  /** e.g., "identity.manager", "application.applicationOwner", "department.departmentHead" */
+  referenceObjectPath: string;
+  referenceLabel: string;
+  fallbackIdentityName: string;
+  slaHours: number;
+  escalateToReferencePath?: string;
+}
+
+export interface DemoCustomWorkflow {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  status: 'Active' | 'Draft' | 'Paused';
+  sourceObjectId: string;
+  triggerEvent: CustomWorkflowTrigger;
+  conditions: CustomWorkflowCondition[];
+  stages: CustomWorkflowStage[];
+  createdAt: string;
+  lastSimulatedAt?: string;
+}
+
+export const INITIAL_CUSTOM_WORKFLOWS: DemoCustomWorkflow[] = [
+  {
+    id: 'cwf-1',
+    code: 'WF-CUST-001',
+    name: 'Privileged Access Dual-Reference Approval',
+    description:
+      'Resolves the requesting identity’s Line Manager reference first, then routes to the target Application Owner identity reference with automatic skip-level escalation.',
+    status: 'Active',
+    sourceObjectId: 'obj-identity',
+    triggerEvent: 'On Access Request',
+    conditions: [
+      {
+        id: 'cond-1',
+        propertyKey: 'isPrivileged',
+        operator: 'equals',
+        value: 'true',
+      },
+    ],
+    stages: [
+      {
+        id: 'stg-1',
+        stepOrder: 1,
+        name: 'Line Manager Sign-Off',
+        stageKind: 'Approval',
+        resolverMode: 'Reference Property (Identity)',
+        referenceObjectPath: 'identity.manager',
+        referenceLabel: 'Identity → Line Manager / Sponsor',
+        fallbackIdentityName: 'Claire Vance',
+        slaHours: 24,
+        escalateToReferencePath: 'department.departmentHead',
+      },
+      {
+        id: 'stg-2',
+        stepOrder: 2,
+        name: 'Application Owner Governance Approval',
+        stageKind: 'Approval',
+        resolverMode: 'Reference Property (Identity)',
+        referenceObjectPath: 'application.applicationOwner',
+        referenceLabel: 'Connected Application → Application Owner',
+        fallbackIdentityName: 'David Chen',
+        slaHours: 48,
+        escalateToReferencePath: 'application.technicalSteward',
+      },
+      {
+        id: 'stg-3',
+        stepOrder: 3,
+        name: 'Provision & Notify Entitlement Owner',
+        stageKind: 'Provisioning Action',
+        resolverMode: 'Reference Property (Identity)',
+        referenceObjectPath: 'entitlement.entitlementOwner',
+        referenceLabel: 'Entitlement → Entitlement Owner',
+        fallbackIdentityName: 'Priya Nair',
+        slaHours: 1,
+      },
+    ],
+    createdAt: '2026-11-24',
+  },
+  {
+    id: 'cwf-2',
+    code: 'WF-CUST-002',
+    name: 'Contractor Sponsor & Department Budget Sign-Off',
+    description:
+      'Triggered when a Contractor identity is created or extended; resolves the assigned Sponsor identity reference and Department Budget Approver identity reference.',
+    status: 'Active',
+    sourceObjectId: 'obj-identity',
+    triggerEvent: 'On Create',
+    conditions: [
+      {
+        id: 'cond-2',
+        propertyKey: 'type',
+        operator: 'equals',
+        value: 'Contractor',
+      },
+    ],
+    stages: [
+      {
+        id: 'stg-2-1',
+        stepOrder: 1,
+        name: 'Internal Sponsor Verification',
+        stageKind: 'Approval',
+        resolverMode: 'Reference Property (Identity)',
+        referenceObjectPath: 'identity.manager',
+        referenceLabel: 'Identity → Line Manager / Sponsor',
+        fallbackIdentityName: 'Priya Nair',
+        slaHours: 24,
+      },
+      {
+        id: 'stg-2-2',
+        stepOrder: 2,
+        name: 'Department Budget Approver Check',
+        stageKind: 'Approval',
+        resolverMode: 'Reference Property (Identity)',
+        referenceObjectPath: 'department.budgetApprover',
+        referenceLabel: 'Department / Cost Center → Budget / License Approver',
+        fallbackIdentityName: 'Claire Vance',
+        slaHours: 48,
+      },
+    ],
+    createdAt: '2026-11-25',
+  },
+  {
+    id: 'cwf-3',
+    code: 'WF-CUST-003',
+    name: 'Sensitive Identity Field Change Alert',
+    description:
+      'Monitors updates to sensitive properties (e.g., National ID or Private MFA Mobile) and alerts both the Line Manager identity reference and Security Operations.',
+    status: 'Active',
+    sourceObjectId: 'obj-identity',
+    triggerEvent: 'On Attribute Change',
+    conditions: [
+      {
+        id: 'cond-3',
+        propertyKey: 'nationalId',
+        operator: 'changed',
+        value: '*',
+      },
+    ],
+    stages: [
+      {
+        id: 'stg-3-1',
+        stepOrder: 1,
+        name: 'Governance Integrity Validation',
+        stageKind: 'Governance Check',
+        resolverMode: 'Reference Property (Identity)',
+        referenceObjectPath: 'identity.manager',
+        referenceLabel: 'Identity → Line Manager / Sponsor',
+        fallbackIdentityName: 'Lucas Meyer',
+        slaHours: 4,
+      },
+      {
+        id: 'stg-3-2',
+        stepOrder: 2,
+        name: 'Notify Technical Steward',
+        stageKind: 'Notification',
+        resolverMode: 'Reference Property (Identity)',
+        referenceObjectPath: 'application.technicalSteward',
+        referenceLabel: 'Connected Application → Technical Steward',
+        fallbackIdentityName: 'Priya Nair',
+        slaHours: 1,
+      },
+    ],
+    createdAt: '2026-11-25',
+  },
+];

@@ -3,8 +3,10 @@ import {
   ArrowUpRight,
   CheckCircle2,
   Cpu,
+  Database,
   Eye,
   EyeOff,
+  GitBranch,
   Mail,
   Palette,
   RefreshCw,
@@ -25,10 +27,18 @@ import {
   type SmtpConfig,
 } from '@/data/demoSampleData';
 import { Switch, Tabs } from '@/components/ui/Primitives';
+import { ConfigurationSchemaTab } from '@/demo/views/ConfigurationSchemaTab';
+import { ConfigurationWorkflowsTab } from '@/demo/views/ConfigurationWorkflowsTab';
 import { useDemoStore } from '@/store/useDemoStore';
 import { cn } from '@/lib/cn';
 
-type ConfigTabId = 'email-smtp' | 'master-template' | 'provisioning' | 'governance';
+type ConfigTabId =
+  | 'objects-schema'
+  | 'custom-workflows'
+  | 'email-smtp'
+  | 'master-template'
+  | 'provisioning'
+  | 'governance';
 
 const SMTP_AUTH_METHODS: SmtpAuthMethod[] = [
   'OAuth 2.0 / Graph Client Credentials',
@@ -49,6 +59,8 @@ const WORKFLOW_OPTIONS: ReviewWorkflowType[] = [
 export function ConfigurationView() {
   const platformConfig = useDemoStore((s) => s.platformConfig);
   const emailNotifications = useDemoStore((s) => s.emailNotifications);
+  const schemaObjects = useDemoStore((s) => s.schemaObjects);
+  const customWorkflows = useDemoStore((s) => s.customWorkflows);
   const updateSmtpConfig = useDemoStore((s) => s.updateSmtpConfig);
   const testSmtpConnection = useDemoStore((s) => s.testSmtpConnection);
   const updateMasterEmailTemplate = useDemoStore((s) => s.updateMasterEmailTemplate);
@@ -56,7 +68,7 @@ export function ConfigurationView() {
   const updateGovernanceConfig = useDemoStore((s) => s.updateGovernanceConfig);
   const setActiveSection = useDemoStore((s) => s.setActiveSection);
 
-  const [activeTab, setActiveTab] = useState<ConfigTabId>('email-smtp');
+  const [activeTab, setActiveTab] = useState<ConfigTabId>('objects-schema');
   const [showSecret, setShowSecret] = useState(false);
 
   // Local editable drafts synced with store
@@ -117,7 +129,7 @@ export function ConfigurationView() {
             Platform Configuration
           </h1>
           <p className="text-sm text-slate-500">
-            Configure SMTP mail delivery, global inherited Master Email Template styling, provisioning defaults, and governance guardrails across the demo.
+            Configure custom data objects, property types &amp; sensitive field masking, reference-object workflows, SMTP delivery, Master Email Template styling, and governance defaults.
           </p>
         </div>
       </div>
@@ -130,10 +142,22 @@ export function ConfigurationView() {
       >
         <Tabs.List className="flex flex-wrap gap-1.5 rounded-2xl border border-slate-200 bg-white p-2 shadow-xs">
           {[
-            { id: 'email-smtp' as const, label: 'Email & SMTP Relay', icon: Mail },
-            { id: 'master-template' as const, label: 'Master Email Template', icon: Palette },
-            { id: 'provisioning' as const, label: 'Provisioning & Imports', icon: Cpu },
-            { id: 'governance' as const, label: 'Governance & Reviews', icon: ShieldCheck },
+            {
+              id: 'objects-schema' as const,
+              label: 'Objects & Schema',
+              icon: Database,
+              badge: schemaObjects.length,
+            },
+            {
+              id: 'custom-workflows' as const,
+              label: 'Custom Workflows',
+              icon: GitBranch,
+              badge: customWorkflows.length,
+            },
+            { id: 'email-smtp' as const, label: 'Email & SMTP Relay', icon: Mail, badge: null },
+            { id: 'master-template' as const, label: 'Master Email Template', icon: Palette, badge: null },
+            { id: 'provisioning' as const, label: 'Provisioning & Imports', icon: Cpu, badge: null },
+            { id: 'governance' as const, label: 'Governance & Reviews', icon: ShieldCheck, badge: null },
           ].map((tab) => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;
@@ -150,10 +174,25 @@ export function ConfigurationView() {
               >
                 <Icon className={cn('h-3.5 w-3.5', active ? 'text-[#0EA5E9]' : 'text-slate-400')} />
                 <span>{tab.label}</span>
+                {tab.badge !== null && (
+                  <span className="rounded-full bg-slate-100 px-1.5 py-0.5 font-mono text-[9px] font-bold text-slate-600">
+                    {tab.badge}
+                  </span>
+                )}
               </Tabs.Trigger>
             );
           })}
         </Tabs.List>
+
+        {/* TAB 0A: DATA OBJECTS, PROPERTIES, TYPES & SENSITIVE FIELD MASKING */}
+        <Tabs.Content value="objects-schema" className="focus:outline-none">
+          <ConfigurationSchemaTab />
+        </Tabs.Content>
+
+        {/* TAB 0B: CUSTOM WORKFLOWS ON REFERENCE OBJECTS */}
+        <Tabs.Content value="custom-workflows" className="focus:outline-none">
+          <ConfigurationWorkflowsTab />
+        </Tabs.Content>
 
         {/* TAB 1: SMTP SERVICE / HOST & AUTHENTICATION */}
         <Tabs.Content value="email-smtp" className="focus:outline-none">
