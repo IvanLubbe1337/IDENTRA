@@ -9,6 +9,7 @@ export type DemoSectionId =
   | 'roles'
   | 'role-mining'
   | 'birthrights'
+  | 'licenses'
   | 'access-marketplace'
   | 'governance-assurance'
   | 'access-reviews'
@@ -6187,3 +6188,1735 @@ export const INITIAL_CUSTOM_WORKFLOWS: DemoCustomWorkflow[] = [
     createdAt: '2026-11-25',
   },
 ];
+
+/* -------------------------------------------------------------------------- */
+/* License SKU Inventory, Consumption, Birthright Capacity & Identity Types   */
+/* -------------------------------------------------------------------------- */
+
+export type LicenseVendor = 'Microsoft' | 'SAP' | 'GitHub' | 'Okta' | 'Salesforce';
+
+export interface DemoLicenseSku {
+  id: string;
+  skuCode: string;
+  name: string;
+  shortLabel: string;
+  vendor: LicenseVendor;
+  application: string;
+  tier: 'Enterprise' | 'Frontline' | 'AI Add-On' | 'ERP' | 'Developer' | 'IdP';
+  totalPurchased: number;
+  consumed: number;
+  reclaimableInactive: number;
+  monthlyCostZar: number;
+  warningThresholdPct: number;
+  /** Enterprise workforce projection factor per matched sample identity in birthright simulation */
+  birthrightProjectionScale: number;
+  licensedIdentityBreakdown: {
+    employees: number;
+    contractors: number;
+    nonHumans: number;
+    privilegedAdmins: number;
+    externalGuests: number;
+  };
+}
+
+export const INITIAL_LICENSE_SKUS: DemoLicenseSku[] = [
+  {
+    id: 'lic-m365-e5',
+    skuCode: 'SPE_E5',
+    name: 'Microsoft 365 E5 (SPE_E5)',
+    shortLabel: 'M365 E5',
+    vendor: 'Microsoft',
+    application: 'Microsoft Entra ID',
+    tier: 'Enterprise',
+    totalPurchased: 1200,
+    consumed: 1192,
+    reclaimableInactive: 18,
+    monthlyCostZar: 1050,
+    warningThresholdPct: 90,
+    birthrightProjectionScale: 7,
+    licensedIdentityBreakdown: {
+      employees: 1046,
+      contractors: 48,
+      nonHumans: 14,
+      privilegedAdmins: 84,
+      externalGuests: 0,
+    },
+  },
+  {
+    id: 'lic-m365-e3',
+    skuCode: 'SPE_E3',
+    name: 'Microsoft 365 E3 (SPE_E3)',
+    shortLabel: 'M365 E3',
+    vendor: 'Microsoft',
+    application: 'Microsoft Entra ID',
+    tier: 'Enterprise',
+    totalPurchased: 5000,
+    consumed: 4810,
+    reclaimableInactive: 64,
+    monthlyCostZar: 680,
+    warningThresholdPct: 90,
+    birthrightProjectionScale: 4,
+    licensedIdentityBreakdown: {
+      employees: 4320,
+      contractors: 382,
+      nonHumans: 36,
+      privilegedAdmins: 72,
+      externalGuests: 0,
+    },
+  },
+  {
+    id: 'lic-m365-f3',
+    skuCode: 'SPE_F3',
+    name: 'Microsoft 365 F3 Frontline (SPE_F3)',
+    shortLabel: 'M365 F3',
+    vendor: 'Microsoft',
+    application: 'Microsoft Entra ID',
+    tier: 'Frontline',
+    totalPurchased: 1500,
+    consumed: 1140,
+    reclaimableInactive: 22,
+    monthlyCostZar: 160,
+    warningThresholdPct: 90,
+    birthrightProjectionScale: 5,
+    licensedIdentityBreakdown: {
+      employees: 790,
+      contractors: 240,
+      nonHumans: 0,
+      privilegedAdmins: 0,
+      externalGuests: 110,
+    },
+  },
+  {
+    id: 'lic-m365-copilot',
+    skuCode: 'M365_COPILOT',
+    name: 'Microsoft 365 Copilot Enterprise',
+    shortLabel: 'M365 Copilot',
+    vendor: 'Microsoft',
+    application: 'Microsoft Entra ID',
+    tier: 'AI Add-On',
+    totalPurchased: 300,
+    consumed: 296,
+    reclaimableInactive: 9,
+    monthlyCostZar: 560,
+    warningThresholdPct: 90,
+    birthrightProjectionScale: 6,
+    licensedIdentityBreakdown: {
+      employees: 262,
+      contractors: 12,
+      nonHumans: 6,
+      privilegedAdmins: 16,
+      externalGuests: 0,
+    },
+  },
+  {
+    id: 'lic-sap-pro',
+    skuCode: 'SAP_S4_PRO',
+    name: 'SAP S/4HANA Professional User',
+    shortLabel: 'SAP S/4 Pro',
+    vendor: 'SAP',
+    application: 'SAP S/4HANA Finance',
+    tier: 'ERP',
+    totalPurchased: 1450,
+    consumed: 1388,
+    reclaimableInactive: 26,
+    monthlyCostZar: 2450,
+    warningThresholdPct: 92,
+    birthrightProjectionScale: 5,
+    licensedIdentityBreakdown: {
+      employees: 1210,
+      contractors: 94,
+      nonHumans: 42,
+      privilegedAdmins: 42,
+      externalGuests: 0,
+    },
+  },
+  {
+    id: 'lic-github-ent',
+    skuCode: 'GH_ENT_CLOUD',
+    name: 'GitHub Enterprise Cloud Seat',
+    shortLabel: 'GitHub Ent',
+    vendor: 'GitHub',
+    application: 'GitHub Enterprise',
+    tier: 'Developer',
+    totalPurchased: 1200,
+    consumed: 1164,
+    reclaimableInactive: 19,
+    monthlyCostZar: 390,
+    warningThresholdPct: 90,
+    birthrightProjectionScale: 8,
+    licensedIdentityBreakdown: {
+      employees: 890,
+      contractors: 162,
+      nonHumans: 68,
+      privilegedAdmins: 44,
+      externalGuests: 0,
+    },
+  },
+  {
+    id: 'lic-okta-wf',
+    skuCode: 'OKTA_WF_SSO',
+    name: 'Okta Workforce Identity & MFA',
+    shortLabel: 'Okta SSO+MFA',
+    vendor: 'Okta',
+    application: 'Okta Workforce Cloud',
+    tier: 'IdP',
+    totalPurchased: 7500,
+    consumed: 6732,
+    reclaimableInactive: 41,
+    monthlyCostZar: 115,
+    warningThresholdPct: 92,
+    birthrightProjectionScale: 5,
+    licensedIdentityBreakdown: {
+      employees: 5490,
+      contractors: 718,
+      nonHumans: 146,
+      privilegedAdmins: 188,
+      externalGuests: 190,
+    },
+  },
+  {
+    id: 'lic-sfdc-ent',
+    skuCode: 'SFDC_ENT',
+    name: 'Salesforce Enterprise CRM License',
+    shortLabel: 'Salesforce Ent',
+    vendor: 'Salesforce',
+    application: 'Salesforce CRM',
+    tier: 'Enterprise',
+    totalPurchased: 650,
+    consumed: 598,
+    reclaimableInactive: 14,
+    monthlyCostZar: 2950,
+    warningThresholdPct: 90,
+    birthrightProjectionScale: 6,
+    licensedIdentityBreakdown: {
+      employees: 524,
+      contractors: 48,
+      nonHumans: 12,
+      privilegedAdmins: 14,
+      externalGuests: 0,
+    },
+  },
+];
+
+export interface BirthrightLicenseContributor {
+  ruleId: string;
+  ruleCode: string;
+  ruleName: string;
+  matchedSampleCount: number;
+  projectedNewSeats: number;
+}
+
+export interface SkuBirthrightEvaluation {
+  sku: DemoLicenseSku;
+  availableSeats: number;
+  utilizationPct: number;
+  birthrightProjectedSeats: number;
+  projectedTotalConsumed: number;
+  projectedUtilizationPct: number;
+  exceedsPool: boolean;
+  shortfallSeats: number;
+  projectedOverageMonthlyZar: number;
+  status: 'Exceeded' | 'Near Limit' | 'Healthy';
+  contributingRules: BirthrightLicenseContributor[];
+}
+
+export function matchGrantToLicenseSku(
+  grant: BirthrightGrant,
+  skus: DemoLicenseSku[]
+): DemoLicenseSku | null {
+  if (grant.kind !== 'License SKU') return null;
+  const needle = grant.name.trim().toLowerCase();
+  return (
+    skus.find(
+      (s) =>
+        s.name.toLowerCase() === needle ||
+        needle.includes(s.skuCode.toLowerCase()) ||
+        needle.includes(s.shortLabel.toLowerCase())
+    ) ?? null
+  );
+}
+
+export function evaluateSkuBirthrightDemand(
+  skus: DemoLicenseSku[],
+  birthrights: DemoBirthrightRule[],
+  people: DemoPerson[]
+): SkuBirthrightEvaluation[] {
+  const activeRules = birthrights.filter((r) => r.status === 'Active');
+
+  return skus.map((sku) => {
+    const contributors: BirthrightLicenseContributor[] = [];
+
+    activeRules.forEach((rule) => {
+      const grantsSku = rule.grants.some(
+        (g) => matchGrantToLicenseSku(g, [sku]) !== null
+      );
+      if (!grantsSku) return;
+
+      const matched = evaluateBirthrightMatches(rule, people).length;
+      if (matched === 0) return;
+
+      const projectedNewSeats = matched * sku.birthrightProjectionScale;
+      contributors.push({
+        ruleId: rule.id,
+        ruleCode: rule.code,
+        ruleName: rule.name,
+        matchedSampleCount: matched,
+        projectedNewSeats,
+      });
+    });
+
+    const birthrightProjectedSeats = contributors.reduce(
+      (sum, c) => sum + c.projectedNewSeats,
+      0
+    );
+    const availableSeats = Math.max(0, sku.totalPurchased - sku.consumed);
+    const utilizationPct =
+      sku.totalPurchased > 0
+        ? Math.round((sku.consumed / sku.totalPurchased) * 1000) / 10
+        : 0;
+    const projectedTotalConsumed = sku.consumed + birthrightProjectedSeats;
+    const projectedUtilizationPct =
+      sku.totalPurchased > 0
+        ? Math.round((projectedTotalConsumed / sku.totalPurchased) * 1000) / 10
+        : 0;
+    const exceedsPool = projectedTotalConsumed > sku.totalPurchased;
+    const shortfallSeats = Math.max(0, projectedTotalConsumed - sku.totalPurchased);
+    const projectedOverageMonthlyZar = shortfallSeats * sku.monthlyCostZar;
+
+    const status: SkuBirthrightEvaluation['status'] = exceedsPool
+      ? 'Exceeded'
+      : projectedUtilizationPct >= sku.warningThresholdPct ||
+          utilizationPct >= sku.warningThresholdPct
+        ? 'Near Limit'
+        : 'Healthy';
+
+    return {
+      sku,
+      availableSeats,
+      utilizationPct,
+      birthrightProjectedSeats,
+      projectedTotalConsumed,
+      projectedUtilizationPct,
+      exceedsPool,
+      shortfallSeats,
+      projectedOverageMonthlyZar,
+      status,
+      contributingRules: contributors,
+    };
+  });
+}
+
+export interface DraftBirthrightLicenseWarning {
+  skuId: string;
+  skuCode: string;
+  skuName: string;
+  consumed: number;
+  totalPurchased: number;
+  availableSeats: number;
+  projectedRuleSeats: number;
+  projectedTotal: number;
+  exceedsPool: boolean;
+  nearLimit: boolean;
+  shortfallSeats: number;
+  overageMonthlyZar: number;
+}
+
+export function evaluateDraftBirthrightLicenseWarnings(
+  draftGrants: BirthrightGrant[],
+  matchedCount: number,
+  skus: DemoLicenseSku[]
+): DraftBirthrightLicenseWarning[] {
+  const warnings: DraftBirthrightLicenseWarning[] = [];
+  const seen = new Set<string>();
+
+  draftGrants.forEach((grant) => {
+    const sku = matchGrantToLicenseSku(grant, skus);
+    if (!sku || seen.has(sku.id)) return;
+    seen.add(sku.id);
+
+    const projectedRuleSeats = Math.max(1, matchedCount) * sku.birthrightProjectionScale;
+    const projectedTotal = sku.consumed + projectedRuleSeats;
+    const availableSeats = Math.max(0, sku.totalPurchased - sku.consumed);
+    const exceedsPool = projectedTotal > sku.totalPurchased;
+    const nearLimit =
+      !exceedsPool &&
+      sku.totalPurchased > 0 &&
+      (projectedTotal / sku.totalPurchased) * 100 >= sku.warningThresholdPct;
+    const shortfallSeats = Math.max(0, projectedTotal - sku.totalPurchased);
+
+    warnings.push({
+      skuId: sku.id,
+      skuCode: sku.skuCode,
+      skuName: sku.name,
+      consumed: sku.consumed,
+      totalPurchased: sku.totalPurchased,
+      availableSeats,
+      projectedRuleSeats,
+      projectedTotal,
+      exceedsPool,
+      nearLimit,
+      shortfallSeats,
+      overageMonthlyZar: shortfallSeats * sku.monthlyCostZar,
+    });
+  });
+
+  return warnings;
+}
+
+export interface LicensedIdentityTypeSummary {
+  id: string;
+  identityType:
+    | 'Permanent Employees (FTE)'
+    | 'External Contractors'
+    | 'Non-Human Identities (Service / AI)'
+    | 'Privileged / Admin Identities'
+    | 'B2B Guests & Partners';
+  description: string;
+  licensedIdentitiesCount: number;
+  totalSeatsConsumed: number;
+  sharePct: number;
+  monthlySpendZar: number;
+  topSkus: string[];
+  accentColor: string;
+}
+
+export function computeLicensedIdentitiesByType(
+  skus: DemoLicenseSku[],
+  people: DemoPerson[],
+  nonHumans: DemoNonHuman[]
+): {
+  totalUniqueLicensedIdentities: number;
+  rows: LicensedIdentityTypeSummary[];
+} {
+  // Base unique licensed identity counts scaled dynamically with live store changes
+  const extraEmployees = Math.max(
+    0,
+    people.filter((p) => p.type === 'Employee' && p.jmlStatus !== 'Deactivated').length - 5
+  );
+  const extraContractors = Math.max(
+    0,
+    people.filter((p) => p.type === 'Contractor' && p.jmlStatus !== 'Deactivated').length - 1
+  );
+  const extraNhi = Math.max(0, nonHumans.length - 4);
+
+  const empSeats = skus.reduce((s, k) => s + k.licensedIdentityBreakdown.employees, 0);
+  const ctrSeats = skus.reduce((s, k) => s + k.licensedIdentityBreakdown.contractors, 0);
+  const nhiSeats = skus.reduce((s, k) => s + k.licensedIdentityBreakdown.nonHumans, 0);
+  const privSeats = skus.reduce((s, k) => s + k.licensedIdentityBreakdown.privilegedAdmins, 0);
+  const guestSeats = skus.reduce((s, k) => s + k.licensedIdentityBreakdown.externalGuests, 0);
+
+  const empSpend = skus.reduce(
+    (s, k) => s + k.licensedIdentityBreakdown.employees * k.monthlyCostZar,
+    0
+  );
+  const ctrSpend = skus.reduce(
+    (s, k) => s + k.licensedIdentityBreakdown.contractors * k.monthlyCostZar,
+    0
+  );
+  const nhiSpend = skus.reduce(
+    (s, k) => s + k.licensedIdentityBreakdown.nonHumans * k.monthlyCostZar,
+    0
+  );
+  const privSpend = skus.reduce(
+    (s, k) => s + k.licensedIdentityBreakdown.privilegedAdmins * k.monthlyCostZar,
+    0
+  );
+  const guestSpend = skus.reduce(
+    (s, k) => s + k.licensedIdentityBreakdown.externalGuests * k.monthlyCostZar,
+    0
+  );
+
+  // Unique licensed identities per type (an identity typically holds 1-3 SKUs)
+  const uniqueEmployees =
+    Math.max(
+      ...skus.map((k) => k.licensedIdentityBreakdown.employees),
+      5490
+    ) + extraEmployees;
+  const uniqueContractors =
+    Math.max(
+      ...skus.map((k) => k.licensedIdentityBreakdown.contractors),
+      718
+    ) + extraContractors;
+  const uniqueNhi =
+    Math.max(
+      ...skus.map((k) => k.licensedIdentityBreakdown.nonHumans),
+      146
+    ) + extraNhi;
+  const uniquePriv = Math.max(
+    ...skus.map((k) => k.licensedIdentityBreakdown.privilegedAdmins),
+    188
+  );
+  const uniqueGuests = Math.max(
+    ...skus.map((k) => k.licensedIdentityBreakdown.externalGuests),
+    190
+  );
+
+  const totalUnique =
+    uniqueEmployees + uniqueContractors + uniqueNhi + uniquePriv + uniqueGuests;
+
+  const pct = (n: number) =>
+    totalUnique > 0 ? Math.round((n / totalUnique) * 1000) / 10 : 0;
+
+  return {
+    totalUniqueLicensedIdentities: totalUnique,
+    rows: [
+      {
+        id: 'type-fte',
+        identityType: 'Permanent Employees (FTE)',
+        description: 'Full-time staff consuming corporate productivity, ERP, and SSO licenses.',
+        licensedIdentitiesCount: uniqueEmployees,
+        totalSeatsConsumed: empSeats,
+        sharePct: pct(uniqueEmployees),
+        monthlySpendZar: empSpend,
+        topSkus: ['M365 E3', 'M365 E5', 'SAP S/4 Pro', 'Okta SSO+MFA'],
+        accentColor: '#0EA5E9',
+      },
+      {
+        id: 'type-contractor',
+        identityType: 'External Contractors',
+        description: 'Fixed-term external consultants & developers with expiry-bound licenses.',
+        licensedIdentitiesCount: uniqueContractors,
+        totalSeatsConsumed: ctrSeats,
+        sharePct: pct(uniqueContractors),
+        monthlySpendZar: ctrSpend,
+        topSkus: ['M365 E3', 'M365 F3', 'GitHub Ent', 'Okta SSO+MFA'],
+        accentColor: '#6366F1',
+      },
+      {
+        id: 'type-priv',
+        identityType: 'Privileged / Admin Identities',
+        description: 'Dedicated Tier-0/Tier-1 administrative identities holding E5 security & PAM seats.',
+        licensedIdentitiesCount: uniquePriv,
+        totalSeatsConsumed: privSeats,
+        sharePct: pct(uniquePriv),
+        monthlySpendZar: privSpend,
+        topSkus: ['M365 E5', 'Okta SSO+MFA', 'GitHub Ent', 'SAP S/4 Pro'],
+        accentColor: '#F59E0B',
+      },
+      {
+        id: 'type-guests',
+        identityType: 'B2B Guests & Partners',
+        description: 'External partner collaborators consuming Frontline & B2B federated licenses.',
+        licensedIdentitiesCount: uniqueGuests,
+        totalSeatsConsumed: guestSeats,
+        sharePct: pct(uniqueGuests),
+        monthlySpendZar: guestSpend,
+        topSkus: ['Okta SSO+MFA', 'M365 F3'],
+        accentColor: '#10B981',
+      },
+      {
+        id: 'type-nhi',
+        identityType: 'Non-Human Identities (Service / AI)',
+        description: 'Governed service accounts, bots, and AI copilots consuming dedicated seats.',
+        licensedIdentitiesCount: uniqueNhi,
+        totalSeatsConsumed: nhiSeats,
+        sharePct: pct(uniqueNhi),
+        monthlySpendZar: nhiSpend,
+        topSkus: ['Okta SSO+MFA', 'GitHub Ent', 'SAP S/4 Pro', 'M365 Copilot'],
+        accentColor: '#8B5CF6',
+      },
+    ],
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Predicted / Future Leavers & Calculated Exit Impact Engine                 */
+/* -------------------------------------------------------------------------- */
+
+export type PredictedChangeCategory =
+  | 'Account Disable'
+  | 'Role / Entitlement Revoke'
+  | 'License Reclaim'
+  | 'Ownership Handoff';
+
+export interface PredictedExitChange {
+  id: string;
+  category: PredictedChangeCategory;
+  targetSystem: DemoProvisioningJob['application'] | 'IDENTRA Governance';
+  objectName: string;
+  operation: 'Disable' | 'Delete' | 'Revoke' | 'Reclaim' | 'Reassign';
+  beforeValue: string;
+  afterValue: string;
+  detail: string;
+  monthlySavingsZar?: number;
+  skuId?: string;
+}
+
+export interface DemoPredictedLeaver {
+  id: string;
+  personId?: string;
+  identityName: string;
+  employeeNumber: string;
+  email: string;
+  title: string;
+  department: string;
+  identityType: 'Employee' | 'Contractor';
+  manager: string;
+  scheduledExitDate: string;
+  daysUntilExit: number;
+  predictionSource:
+    | 'Workday HRIS Scheduled Termination'
+    | 'B2B Contractor End Date'
+    | 'Fixed-Term Contract Expiry';
+  confidencePct: number;
+  status: 'Predicted' | 'Pre-Staged (Simulation)' | 'Offboarded';
+  stagedJobCodes?: string[];
+  calculatedChanges: PredictedExitChange[];
+}
+
+export const INITIAL_PREDICTED_LEAVERS: DemoPredictedLeaver[] = [
+  {
+    id: 'pl-1',
+    identityName: 'Thabo Mokoena',
+    employeeNumber: 'CTR-90342',
+    email: 'thabo.mokoena@cloudpartners.co.za',
+    title: 'Senior DevOps Contractor',
+    department: 'Platform & Cloud Engineering',
+    identityType: 'Contractor',
+    manager: 'Priya Nair',
+    scheduledExitDate: '2026-12-01',
+    daysUntilExit: 4,
+    predictionSource: 'B2B Contractor End Date',
+    confidencePct: 100,
+    status: 'Predicted',
+    calculatedChanges: [
+      {
+        id: 'pc-1-1',
+        category: 'Account Disable',
+        targetSystem: 'Active Directory',
+        objectName: 'tmokoena_ext (OU=Contractors)',
+        operation: 'Disable',
+        beforeValue: 'Enabled (UAC 512) · OU=Contractors',
+        afterValue: 'Disabled (UAC 514) · OU=DisabledUsers',
+        detail: 'Disable AD account at 17:00 SAST on 2026-12-01 and relocate DN to DisabledUsers.',
+      },
+      {
+        id: 'pc-1-2',
+        category: 'Account Disable',
+        targetSystem: 'AWS Prod Vault',
+        objectName: 'aws.tmokoena-sre-contractor',
+        operation: 'Delete',
+        beforeValue: 'Active IAM Identity Center + 1 Access Key',
+        afterValue: 'Access Key Deleted · SSO Session Revoked',
+        detail: 'Immediately delete standing programmatic access key and terminate AWS SSO assignment.',
+      },
+      {
+        id: 'pc-1-3',
+        category: 'Role / Entitlement Revoke',
+        targetSystem: 'Active Directory',
+        objectName: 'Prod K8s Operator (JIT) + SG-DevOps-Deploy',
+        operation: 'Revoke',
+        beforeValue: '2 Active Roles / Groups',
+        afterValue: '0 Active Assignments',
+        detail: 'Strip privileged deployment groups and auto-revoke birthright BR-006 contractor sandbox.',
+      },
+      {
+        id: 'pc-1-4',
+        category: 'License Reclaim',
+        targetSystem: 'Microsoft Entra ID',
+        objectName: 'Microsoft 365 E3 (SPE_E3)',
+        operation: 'Reclaim',
+        beforeValue: 'Assigned (Active)',
+        afterValue: 'Returned to Pool (+1 seat)',
+        detail: 'Harvest paid M365 E3 license back into enterprise pool on exit.',
+        monthlySavingsZar: 680,
+        skuId: 'lic-m365-e3',
+      },
+      {
+        id: 'pc-1-5',
+        category: 'License Reclaim',
+        targetSystem: 'Okta Workforce',
+        objectName: 'GitHub Enterprise Cloud Seat',
+        operation: 'Reclaim',
+        beforeValue: 'Assigned (Active)',
+        afterValue: 'Returned to Pool (+1 seat)',
+        detail: 'Reclaim GitHub Enterprise seat and revoke org SSH signing keys.',
+        monthlySavingsZar: 390,
+        skuId: 'lic-github-ent',
+      },
+    ],
+  },
+  {
+    id: 'pl-2',
+    identityName: 'Annelize Botha',
+    employeeNumber: 'EMP-10488',
+    email: 'annelize.botha@identra-corp.io',
+    title: 'Senior Financial Controller',
+    department: 'Corporate Finance & Treasury',
+    identityType: 'Employee',
+    manager: 'David Chen',
+    scheduledExitDate: '2026-12-08',
+    daysUntilExit: 11,
+    predictionSource: 'Workday HRIS Scheduled Termination',
+    confidencePct: 100,
+    status: 'Predicted',
+    calculatedChanges: [
+      {
+        id: 'pc-2-1',
+        category: 'Account Disable',
+        targetSystem: 'SAP S/4HANA Finance',
+        objectName: 'ABOTHA_FIN (SAP Dialog)',
+        operation: 'Disable',
+        beforeValue: 'Valid Until 9999-12-31 · Unlocked',
+        afterValue: 'Valid To 2026-12-08 · Locked (Code 64)',
+        detail: 'Set SAP user validity end date and lock dialog logon via SAP BAPI.',
+      },
+      {
+        id: 'pc-2-2',
+        category: 'Account Disable',
+        targetSystem: 'Microsoft Entra ID',
+        objectName: 'abotha@corp.identra.net',
+        operation: 'Disable',
+        beforeValue: 'accountEnabled = true',
+        afterValue: 'accountEnabled = false · Refresh Tokens Revoked',
+        detail: 'Block Entra ID sign-in, revoke OAuth refresh tokens, and convert mailbox to Shared.',
+      },
+      {
+        id: 'pc-2-3',
+        category: 'Role / Entitlement Revoke',
+        targetSystem: 'SAP S/4HANA Finance',
+        objectName: 'Finance: Base Ledger Read + SAP:FIORI_ANALYTICS_VIEWER',
+        operation: 'Revoke',
+        beforeValue: '3 SAP & Birthright Roles (BR-002, BR-005)',
+        afterValue: 'Revoked on Exit (Auto-Revoke)',
+        detail: 'Remove SAP general ledger roles and auto-revoke Finance birthrights.',
+      },
+      {
+        id: 'pc-2-4',
+        category: 'License Reclaim',
+        targetSystem: 'Microsoft Entra ID',
+        objectName: 'Microsoft 365 E5 (SPE_E5)',
+        operation: 'Reclaim',
+        beforeValue: 'Assigned (E5 Pool Near/Over Limit)',
+        afterValue: 'Returned to Pool (+1 E5 seat)',
+        detail: 'Frees 1 scarce SPE_E5 license seat, easing BR-005 capacity pressure.',
+        monthlySavingsZar: 1050,
+        skuId: 'lic-m365-e5',
+      },
+      {
+        id: 'pc-2-5',
+        category: 'License Reclaim',
+        targetSystem: 'SAP S/4HANA Finance',
+        objectName: 'SAP S/4HANA Professional User',
+        operation: 'Reclaim',
+        beforeValue: 'Assigned (Professional Tier)',
+        afterValue: 'Returned to Pool (+1 SAP seat)',
+        detail: 'Reclaim high-cost SAP S/4HANA Professional User license.',
+        monthlySavingsZar: 2450,
+        skuId: 'lic-sap-pro',
+      },
+      {
+        id: 'pc-2-6',
+        category: 'Ownership Handoff',
+        targetSystem: 'IDENTRA Governance',
+        objectName: '3 Direct Reports & 2 Owned Entitlements',
+        operation: 'Reassign',
+        beforeValue: 'Manager / Owner: Annelize Botha',
+        afterValue: 'Re-parent to Claire Vance (Prevents GA-CTRL-01 & GA-CTRL-03 violations)',
+        detail: 'Proactively reassign direct reports and Finance entitlement ownership prior to exit date.',
+      },
+    ],
+  },
+  {
+    id: 'pl-3',
+    identityName: 'Kagiso Mahlangu',
+    employeeNumber: 'EMP-10712',
+    email: 'kagiso.mahlangu@identra-corp.io',
+    title: 'Enterprise Data Engineer',
+    department: 'Data Governance & Analytics',
+    identityType: 'Employee',
+    manager: 'Lucas Meyer',
+    scheduledExitDate: '2026-12-15',
+    daysUntilExit: 18,
+    predictionSource: 'Workday HRIS Scheduled Termination',
+    confidencePct: 100,
+    status: 'Predicted',
+    calculatedChanges: [
+      {
+        id: 'pc-3-1',
+        category: 'Account Disable',
+        targetSystem: 'Snowflake PII Lake',
+        objectName: 'KMAHLANGU_DATA',
+        operation: 'Disable',
+        beforeValue: 'ACTIVE · Role: PII_ANALYTICS_WRITER',
+        afterValue: 'DISABLED = TRUE · Sessions Terminated',
+        detail: 'Disable Snowflake account and drop standing PII warehouse session tokens.',
+      },
+      {
+        id: 'pc-3-2',
+        category: 'Account Disable',
+        targetSystem: 'Okta Workforce',
+        objectName: 'kagiso.mahlangu@identra-corp.io',
+        operation: 'Disable',
+        beforeValue: 'ACTIVE · FIDO2 Enrolled',
+        afterValue: 'DEPROVISIONED · All App Tokens Cleared',
+        detail: 'Deactivate Okta Workforce identity and revoke all SAML/OIDC federation sessions.',
+      },
+      {
+        id: 'pc-3-3',
+        category: 'License Reclaim',
+        targetSystem: 'Microsoft Entra ID',
+        objectName: 'Microsoft 365 Copilot Enterprise',
+        operation: 'Reclaim',
+        beforeValue: 'Assigned (Copilot Pool 98.7% full)',
+        afterValue: 'Returned to Pool (+1 Copilot seat)',
+        detail: 'Reclaim high-demand M365 Copilot add-on license back to pool.',
+        monthlySavingsZar: 560,
+        skuId: 'lic-m365-copilot',
+      },
+      {
+        id: 'pc-3-4',
+        category: 'Ownership Handoff',
+        targetSystem: 'IDENTRA Governance',
+        objectName: 'Steward of svc.analytics-dbt-runner (NHI)',
+        operation: 'Reassign',
+        beforeValue: 'Human Steward: Kagiso Mahlangu',
+        afterValue: 'Transfer Steward to Lucas Meyer (GA-CTRL-05)',
+        detail: 'Prevent service account from becoming an ownerless Non-Human Identity upon exit.',
+      },
+    ],
+  },
+  {
+    id: 'pl-4',
+    identityName: 'Sophia Lindstrom',
+    employeeNumber: 'CTR-90405',
+    email: 'sophia.lindstrom@nordic-advisory.eu',
+    title: 'CRM Commercial Consultant',
+    department: 'Global Revenue & Enterprise Sales',
+    identityType: 'Contractor',
+    manager: 'Marcus Bell',
+    scheduledExitDate: '2026-12-31',
+    daysUntilExit: 34,
+    predictionSource: 'Fixed-Term Contract Expiry',
+    confidencePct: 95,
+    status: 'Predicted',
+    calculatedChanges: [
+      {
+        id: 'pc-4-1',
+        category: 'Account Disable',
+        targetSystem: 'Microsoft Entra ID',
+        objectName: 'slindstrom_ext#EXT#@corp.identra.net',
+        operation: 'Disable',
+        beforeValue: 'Active B2B Guest Account',
+        afterValue: 'Disabled · Guest Sign-In Blocked',
+        detail: 'Disable Entra ID B2B guest account on contract expiration date.',
+      },
+      {
+        id: 'pc-4-2',
+        category: 'Role / Entitlement Revoke',
+        targetSystem: 'Okta Workforce',
+        objectName: 'Sales: Regional CRM Lead + Deal Desk Read',
+        operation: 'Revoke',
+        beforeValue: '2 Commercial CRM Roles',
+        afterValue: 'Revoked on 2026-12-31',
+        detail: 'Revoke CRM and deal-desk access groups automatically at term end.',
+      },
+      {
+        id: 'pc-4-3',
+        category: 'License Reclaim',
+        targetSystem: 'Okta Workforce',
+        objectName: 'Salesforce Enterprise CRM License',
+        operation: 'Reclaim',
+        beforeValue: 'Assigned (Salesforce Enterprise)',
+        afterValue: 'Returned to Pool (+1 SFDC seat)',
+        detail: 'Reclaim high-value Salesforce Enterprise seat immediately on expiry.',
+        monthlySavingsZar: 2950,
+        skuId: 'lic-sfdc-ent',
+      },
+      {
+        id: 'pc-4-4',
+        category: 'License Reclaim',
+        targetSystem: 'Microsoft Entra ID',
+        objectName: 'Microsoft 365 F3 Frontline (SPE_F3)',
+        operation: 'Reclaim',
+        beforeValue: 'Assigned',
+        afterValue: 'Returned to Pool (+1 F3 seat)',
+        detail: 'Reclaim contractor Frontline license.',
+        monthlySavingsZar: 160,
+        skuId: 'lic-m365-f3',
+      },
+    ],
+  },
+  {
+    id: 'pl-5',
+    identityName: 'Willem Pretorius',
+    employeeNumber: 'EMP-10190',
+    email: 'willem.pretorius@identra-corp.io',
+    title: 'Regional Infrastructure Architect',
+    department: 'Platform & Cloud Engineering',
+    identityType: 'Employee',
+    manager: 'Alex Carter',
+    scheduledExitDate: '2027-01-15',
+    daysUntilExit: 49,
+    predictionSource: 'Workday HRIS Scheduled Termination',
+    confidencePct: 100,
+    status: 'Predicted',
+    calculatedChanges: [
+      {
+        id: 'pc-5-1',
+        category: 'Account Disable',
+        targetSystem: 'Active Directory',
+        objectName: 'wpretorius + adm-wpretorius (Tier-1 Admin)',
+        operation: 'Disable',
+        beforeValue: '2 Accounts Enabled (Standard + Admin)',
+        afterValue: 'Both Accounts Disabled & Moved to OU=DisabledUsers',
+        detail: 'Coordinated dual-account disable across both standard and privileged admin AD accounts.',
+      },
+      {
+        id: 'pc-5-2',
+        category: 'Role / Entitlement Revoke',
+        targetSystem: 'AWS Prod Vault',
+        objectName: 'SG-Domain-Tier1-ServerAdmins + AWS Infra Admin',
+        operation: 'Revoke',
+        beforeValue: 'Tier-1 Privileged Standing & JIT Roles',
+        afterValue: 'Revoked Across AD & AWS',
+        detail: 'Strip all privileged infrastructure roles and expire standing certificates.',
+      },
+      {
+        id: 'pc-5-3',
+        category: 'License Reclaim',
+        targetSystem: 'Microsoft Entra ID',
+        objectName: 'Microsoft 365 E5 (SPE_E5)',
+        operation: 'Reclaim',
+        beforeValue: 'Assigned',
+        afterValue: 'Returned to Pool (+1 E5 seat)',
+        detail: 'Reclaim E5 security & compliance license seat.',
+        monthlySavingsZar: 1050,
+        skuId: 'lic-m365-e5',
+      },
+      {
+        id: 'pc-5-4',
+        category: 'Ownership Handoff',
+        targetSystem: 'IDENTRA Governance',
+        objectName: 'Application Owner: Legacy Payroll SFTP Bridge',
+        operation: 'Reassign',
+        beforeValue: 'App Owner: Willem Pretorius',
+        afterValue: 'Handover to Priya Nair before 2027-01-15 (GA-CTRL-02)',
+        detail: 'Reassign connected application ownership to maintain Governance Assurance compliance.',
+      },
+    ],
+  },
+];
+
+/* -------------------------------------------------------------------------- */
+/* Per-Identity Lifecycle Timeline & Access Reconstruction Engine             */
+/* -------------------------------------------------------------------------- */
+
+export type LifecycleTimelineEventKind =
+  | 'Employment Change'
+  | 'Account Creation'
+  | 'Access Grant'
+  | 'Approval'
+  | 'Manager Change'
+  | 'Transfer'
+  | 'Termination'
+  | 'Exception';
+
+export interface IdentityLifecycleTimelineEvent {
+  id: string;
+  timestamp: string;
+  kind: LifecycleTimelineEventKind;
+  title: string;
+  detail: string;
+  actor: string;
+  system: string;
+  referenceCode?: string;
+  accessArtifact?: string;
+  stillActiveToday?: boolean;
+  changes?: { field: string; before: string | null; after: string | null }[];
+}
+
+export interface AccessOriginReconstruction {
+  artifact: string;
+  originType:
+    | 'Birthright Policy'
+    | 'Approved Request'
+    | 'Transfer / Legacy Retention'
+    | 'Governance Exception'
+    | 'Orphan Adoption'
+    | 'Baseline Provisioning';
+  grantedOn: string;
+  approvedOrTriggeredBy: string;
+  referenceCode: string;
+  whyStillHeldToday: string;
+  riskNote?: string;
+}
+
+export function buildIdentityLifecycleTimeline(
+  person: DemoPerson,
+  accessRequests: DemoAccessRequest[],
+  reviews: DemoReviewItem[]
+): IdentityLifecycleTimelineEvent[] {
+  const events: IdentityLifecycleTimelineEvent[] = [];
+
+  // 1. Rich historical baseline tailored per identity
+  if (person.id === 'p-elena') {
+    events.push(
+      {
+        id: 'tl-elena-1',
+        timestamp: '2024-03-14 08:00:00',
+        kind: 'Employment Change',
+        title: 'Permanent Employment Hire (Senior AP Specialist)',
+        detail: 'Authoritative Workday HRIS hire record synchronized into IDENTRA under EMEA Finance Operations.',
+        actor: 'Workday HRIS Core',
+        system: 'Workday HRIS',
+        referenceCode: 'WD-68304',
+        changes: [
+          { field: 'employmentStatus', before: null, after: 'Active (FTE)' },
+          { field: 'title', before: null, after: 'Senior AP Specialist' },
+          { field: 'department', before: null, after: 'Corporate Finance & Treasury' },
+        ],
+      },
+      {
+        id: 'tl-elena-2',
+        timestamp: '2024-03-14 08:04:12',
+        kind: 'Account Creation',
+        title: 'Target Accounts Provisioned (AD, SAP S/4HANA, Okta)',
+        detail: 'Automated Day-1 account creation across Active Directory (evance), Okta Workforce, and SAP S/4HANA.',
+        actor: 'Provisioning Engine',
+        system: 'Active Directory · SAP S/4HANA',
+        referenceCode: 'PRV-4102',
+        accessArtifact: 'AD: evance · SAP: EVANCE_FIN',
+        stillActiveToday: true,
+      },
+      {
+        id: 'tl-elena-3',
+        timestamp: '2024-03-14 08:06:30',
+        kind: 'Access Grant',
+        title: 'Granted Finance: AP-Clerk (Birthright & Onboarding)',
+        detail: 'Assigned AP vendor master creation & invoice posting access for AP Operations role.',
+        actor: 'Birthright Engine (BR-002)',
+        system: 'SAP S/4HANA Finance',
+        referenceCode: 'BR-002',
+        accessArtifact: 'Finance: AP-Clerk (Legacy)',
+        stillActiveToday: person.roles.some((r) => r.includes('AP-Clerk')),
+      },
+      {
+        id: 'tl-elena-4',
+        timestamp: '2024-03-15 10:22:00',
+        kind: 'Approval',
+        title: 'Manager Approval Completed for SAP Vendor Creation',
+        detail: 'Claire Vance approved elevated SAP T-Code XK01/FB60 entitlement under WF-AP-01.',
+        actor: 'Claire Vance (Line Manager)',
+        system: 'IDENTRA Approvals',
+        referenceCode: 'APR-7814',
+        accessArtifact: 'Finance: AP-Clerk (Legacy)',
+        stillActiveToday: person.roles.some((r) => r.includes('AP-Clerk')),
+      },
+      {
+        id: 'tl-elena-5',
+        timestamp: '2026-11-11 08:00:00',
+        kind: 'Transfer',
+        title: 'Internal Transfer: AP Operations → EMEA Treasury & Payments',
+        detail: 'Promoted to Treasury Operations Lead; organizational unit updated in Workday HRIS.',
+        actor: 'Workday HRIS Core',
+        system: 'Workday HRIS',
+        referenceCode: 'WD-TRF-992',
+        changes: [
+          { field: 'orgUnit', before: 'OU-FIN-OPS-EMEA', after: 'OU-FIN-TREASURY-EMEA' },
+          { field: 'title', before: 'Senior AP Specialist', after: 'Treasury Operations Lead' },
+        ],
+      },
+      {
+        id: 'tl-elena-6',
+        timestamp: '2026-11-11 08:00:15',
+        kind: 'Manager Change',
+        title: 'Line Manager Reassigned: Claire Vance → David Chen',
+        detail: 'Reporting line transferred to Treasury Director David Chen following internal move.',
+        actor: 'Workday HRIS Core',
+        system: 'IDENTRA Identity Graph',
+        referenceCode: 'MGR-CHG-118',
+        changes: [{ field: 'manager', before: 'Claire Vance', after: 'David Chen' }],
+      },
+      {
+        id: 'tl-elena-7',
+        timestamp: '2026-11-11 11:45:00',
+        kind: 'Approval',
+        title: 'Dual-Stage Approval for Treasury: Payment Approver',
+        detail: 'David Chen (Manager) and Treasury Risk Committee approved outbound wire release authority.',
+        actor: 'David Chen · Risk Committee',
+        system: 'IDENTRA Approvals',
+        referenceCode: 'REQ-8821',
+        accessArtifact: 'Treasury: Payment Approver',
+        stillActiveToday: person.roles.some((r) => r.includes('Payment Approver')),
+      },
+      {
+        id: 'tl-elena-8',
+        timestamp: '2026-11-11 11:46:10',
+        kind: 'Access Grant',
+        title: 'Provisioned Treasury: Payment Approver Role',
+        detail: 'Granted SAP Treasury payment release entitlements; legacy AP-Clerk remained attached during 14-day handover.',
+        actor: 'Provisioning Engine',
+        system: 'SAP S/4HANA Finance',
+        referenceCode: 'PRV-8849',
+        accessArtifact: 'Treasury: Payment Approver',
+        stillActiveToday: person.roles.some((r) => r.includes('Payment Approver')),
+      },
+      {
+        id: 'tl-elena-9',
+        timestamp: '2026-11-12 09:00:00',
+        kind: 'Exception',
+        title: 'Temporary 10-Day Handover Exception (EXPIRED)',
+        detail: 'Short-term dual-access handover window granted for month-end AP close; expired 2026-11-22 leaving SOX-SOD-402 toxic combination open.',
+        actor: 'SOX Governance Committee',
+        system: 'Policies & SoD Engine',
+        referenceCode: 'EXC-SOX-402',
+        accessArtifact: 'Finance: AP-Clerk (Legacy)',
+        stillActiveToday: Boolean(person.sodAlert),
+      }
+    );
+  } else if (person.id === 'p-sarah') {
+    events.push(
+      {
+        id: 'tl-sarah-1',
+        timestamp: '2026-11-23 10:24:12',
+        kind: 'Employment Change',
+        title: 'Day-1 Joiner Hire (Financial Analyst · FTE)',
+        detail: 'New permanent hire synced from Workday HRIS into EMEA Finance Operations (London HQ).',
+        actor: 'Workday HRIS Core',
+        system: 'Workday HRIS',
+        referenceCode: 'WD-99412',
+        changes: [
+          { field: 'jmlStatus', before: null, after: 'Joiner' },
+          { field: 'costCenter', before: null, after: 'CC-4100-FIN' },
+        ],
+      },
+      {
+        id: 'tl-sarah-2',
+        timestamp: '2026-11-23 10:24:18',
+        kind: 'Account Creation',
+        title: 'Automated Day-1 Accounts Created (AD, Entra ID, SAP)',
+        detail: 'Provisioned sAMAccountName smitchell, UPN smitchell@corp.identra.net, and SAP Dialog read-only account.',
+        actor: 'Provisioning Engine',
+        system: 'Active Directory · Entra ID · SAP',
+        referenceCode: 'PRV-9001',
+        accessArtifact: 'AD: smitchell · Entra: smitchell@corp.identra.net',
+        stillActiveToday: true,
+      },
+      {
+        id: 'tl-sarah-3',
+        timestamp: '2026-11-23 10:24:25',
+        kind: 'Access Grant',
+        title: 'Birthright Pack Provisioned (BR-001, BR-002, BR-005)',
+        detail: 'Automatically assigned Corporate SSO Standard, Finance: Base Ledger Read, and M365 E3/E5 baseline based on Finance UK context.',
+        actor: 'Birthright Engine',
+        system: 'SAP S/4HANA · Okta · Entra ID',
+        referenceCode: 'BR-002',
+        accessArtifact: 'Finance: Base Ledger Read',
+        stillActiveToday: true,
+      },
+      {
+        id: 'tl-sarah-4',
+        timestamp: '2026-11-23 11:05:00',
+        kind: 'Approval',
+        title: 'Line Manager Onboarding Attestation Approved',
+        detail: 'Claire Vance confirmed Finance UK context binding and Day-1 least-privilege scope.',
+        actor: 'Claire Vance (Line Manager)',
+        system: 'IDENTRA Approvals',
+        referenceCode: 'APR-9941',
+        accessArtifact: 'Corporate SSO Standard',
+        stillActiveToday: true,
+      }
+    );
+  } else if (person.id === 'p-mark') {
+    events.push(
+      {
+        id: 'tl-mark-1',
+        timestamp: '2026-08-22 08:00:00',
+        kind: 'Employment Change',
+        title: 'Fixed-Term External Contractor Onboarded (90 Days)',
+        detail: 'Vanguard External Assurance LLP auditor onboarded via B2B Partner Lifecycle Portal with hard expiry 2026-11-21.',
+        actor: 'B2B Partner Lifecycle Portal',
+        system: 'Partner Onboarding',
+        referenceCode: 'B2B-4412-EXT',
+      },
+      {
+        id: 'tl-mark-2',
+        timestamp: '2026-08-22 08:15:00',
+        kind: 'Approval',
+        title: 'Sponsor & SecOps Approval Completed',
+        detail: 'Priya Nair (Sponsor) and Cloud SecOps approved scoped 90-day external cloud audit access.',
+        actor: 'Priya Nair · Cloud SecOps',
+        system: 'IDENTRA Approvals',
+        referenceCode: 'APR-8102',
+        accessArtifact: 'AWS Prod Vault (Audit Read)',
+      },
+      {
+        id: 'tl-mark-3',
+        timestamp: '2026-08-22 08:20:00',
+        kind: 'Account Creation',
+        title: 'Created AD Contractor & AWS Audit Accounts',
+        detail: 'Provisioned mwilson_ext in OU=Contractors and federated AWS Prod Vault read account.',
+        actor: 'Provisioning Engine',
+        system: 'Active Directory · AWS Prod Vault',
+        referenceCode: 'PRV-7410',
+        accessArtifact: 'AD: mwilson_ext · AWS Key',
+      },
+      {
+        id: 'tl-mark-4',
+        timestamp: '2026-10-04 16:40:00',
+        kind: 'Exception',
+        title: 'Direct Out-of-Band AWS Access Key Detected (Unapproved)',
+        detail: 'Direct IAM access key created outside IDENTRA workflow; flagged as high-risk orphan persistence.',
+        actor: 'Drift Detection Scanner',
+        system: 'AWS Prod Vault',
+        referenceCode: 'DRF-902',
+        accessArtifact: 'AWS Prod Vault (Orphan Key)',
+        stillActiveToday: person.jmlStatus !== 'Suspended' && person.jmlStatus !== 'Deactivated',
+      },
+      {
+        id: 'tl-mark-5',
+        timestamp: '2026-11-21 23:59:59',
+        kind: 'Termination',
+        title: 'Contractor Fixed-Term End Date Reached — Offboarding Initiated',
+        detail: 'Contract expired; Active Directory account disabled and moved to OU=DisabledUsers while orphaned AWS key flagged for revocation.',
+        actor: 'B2B Partner Lifecycle Portal',
+        system: 'Active Directory · IDENTRA JML',
+        referenceCode: 'JML-TERM-441',
+        changes: [
+          { field: 'jmlStatus', before: 'Active', after: 'Leaver' },
+          { field: 'accountStatus', before: 'Enabled', after: 'Disabled (AD)' },
+        ],
+      }
+    );
+  } else if (person.id === 'p-john') {
+    events.push(
+      {
+        id: 'tl-john-1',
+        timestamp: '2024-04-01 09:00:00',
+        kind: 'Employment Change',
+        title: 'Permanent Hire (Senior Account Executive · New York)',
+        detail: 'Onboarded via Workday HRIS under Global Revenue & Enterprise Sales.',
+        actor: 'Workday HRIS Core',
+        system: 'Workday HRIS',
+        referenceCode: 'WD-72188',
+      },
+      {
+        id: 'tl-john-2',
+        timestamp: '2024-04-01 09:05:00',
+        kind: 'Account Creation',
+        title: 'Provisioned Entra ID, Okta, Salesforce & Snowflake Accounts',
+        detail: 'Baseline commercial accounts provisioned with M365 E5 and Salesforce Enterprise CRM.',
+        actor: 'Provisioning Engine',
+        system: 'Salesforce · Entra ID · Okta',
+        referenceCode: 'PRV-5120',
+        accessArtifact: 'Sales: Regional CRM Lead',
+        stillActiveToday: true,
+      },
+      {
+        id: 'tl-john-3',
+        timestamp: '2026-11-23 09:47:05',
+        kind: 'Transfer',
+        title: 'Promotion & Regional Transfer: US Mid-Market → Enterprise Sales EMEA',
+        detail: 'Promoted to Enterprise Account Director; org unit updated to OU-SLS-ENT-EMEA.',
+        actor: 'Workday HRIS Core',
+        system: 'Workday HRIS',
+        referenceCode: 'WD-PROM-309',
+        changes: [
+          { field: 'title', before: 'Senior Account Executive', after: 'Enterprise Account Director' },
+          { field: 'orgUnit', before: 'OU-SLS-MID-US', after: 'OU-SLS-ENT-EMEA' },
+        ],
+      },
+      {
+        id: 'tl-john-4',
+        timestamp: '2026-11-23 10:02:00',
+        kind: 'Approval',
+        title: 'Approved Deal Desk Approver Authority',
+        detail: 'Marcus Bell (VP Enterprise Sales) approved elevated Deal Desk Approver role for EMEA enterprise contracts.',
+        actor: 'Marcus Bell (Line Manager)',
+        system: 'IDENTRA Approvals',
+        referenceCode: 'REQ-8910',
+        accessArtifact: 'Deal Desk Approver',
+        stillActiveToday: true,
+      },
+      {
+        id: 'tl-john-5',
+        timestamp: '2026-11-23 10:04:00',
+        kind: 'Access Grant',
+        title: 'Provisioned Deal Desk Approver Role',
+        detail: 'Role granted in Salesforce CRM & Snowflake Analytics following manager approval.',
+        actor: 'Provisioning Engine',
+        system: 'Salesforce CRM · Snowflake',
+        referenceCode: 'PRV-9015',
+        accessArtifact: 'Deal Desk Approver',
+        stillActiveToday: true,
+      }
+    );
+  } else if (person.id === 'p-priya') {
+    events.push(
+      {
+        id: 'tl-priya-1',
+        timestamp: '2023-09-01 08:30:00',
+        kind: 'Employment Change',
+        title: 'Permanent Hire (Principal Platform Engineer)',
+        detail: 'Onboarded into Platform SRE & Cloud Infrastructure under Alex Carter.',
+        actor: 'Workday HRIS Core',
+        system: 'Workday HRIS',
+        referenceCode: 'WD-51209',
+      },
+      {
+        id: 'tl-priya-2',
+        timestamp: '2023-09-01 08:35:00',
+        kind: 'Account Creation',
+        title: 'Provisioned Standard & Privileged Admin Accounts',
+        detail: 'Created pnair@corp.identra.net and separate Tier-1 admin identity adm-pnair@corp.identra.net.',
+        actor: 'Provisioning Engine',
+        system: 'Active Directory · AWS · GitHub',
+        referenceCode: 'PRV-3188',
+        accessArtifact: 'GitHub Org Maintainer',
+        stillActiveToday: true,
+      },
+      {
+        id: 'tl-priya-3',
+        timestamp: '2023-09-04 14:20:00',
+        kind: 'Access Grant',
+        title: 'Assigned Prod K8s Operator (JIT) & GitHub Org Maintainer',
+        detail: 'Granted via Tier-0 SRE Birthright (BR-003) and Alex Carter approval.',
+        actor: 'Birthright Engine (BR-003)',
+        system: 'AWS Prod Vault · GitHub Enterprise',
+        referenceCode: 'BR-003',
+        accessArtifact: 'Prod K8s Operator (JIT)',
+        stillActiveToday: true,
+      },
+      {
+        id: 'tl-priya-4',
+        timestamp: '2026-11-19 14:10:00',
+        kind: 'Approval',
+        title: 'Q4 Privileged Access Certification Approved',
+        detail: 'Alex Carter recertified Prod K8s Operator (JIT) eligibility under 90-day Tier-0 SLA.',
+        actor: 'Alex Carter (VP Engineering)',
+        system: 'Access Reviews',
+        referenceCode: 'REV-Q4-019',
+        accessArtifact: 'Prod K8s Operator (JIT)',
+        stillActiveToday: true,
+      }
+    );
+  } else if (person.id === 'p-lucas') {
+    events.push(
+      {
+        id: 'tl-lucas-1',
+        timestamp: '2024-06-15 08:00:00',
+        kind: 'Employment Change',
+        title: 'Permanent Hire (Head of Data Governance · Zurich)',
+        detail: 'Authoritative hire synced into Enterprise Data Stewardship reporting to CDO Hannah Lindqvist.',
+        actor: 'Workday HRIS Core',
+        system: 'Workday HRIS',
+        referenceCode: 'WD-64901',
+      },
+      {
+        id: 'tl-lucas-2',
+        timestamp: '2024-06-15 08:08:00',
+        kind: 'Account Creation',
+        title: 'Provisioned Snowflake PII Lake, Okta & GitHub Accounts',
+        detail: 'Created governed Snowflake data stewardship account with hardware FIDO2 enforcement.',
+        actor: 'Provisioning Engine',
+        system: 'Snowflake PII Lake · Okta',
+        referenceCode: 'PRV-5902',
+        accessArtifact: 'Snowflake Data Steward',
+        stillActiveToday: true,
+      },
+      {
+        id: 'tl-lucas-3',
+        timestamp: '2024-06-16 11:00:00',
+        kind: 'Approval',
+        title: 'Data Owner & SecOps Approval for Tier-0 PII Stewardship',
+        detail: 'Hannah Lindqvist & Data Protection Officer approved GDPR Art. 32 PII access.',
+        actor: 'Hannah Lindqvist · DPO',
+        system: 'IDENTRA Approvals',
+        referenceCode: 'APR-6204',
+        accessArtifact: 'Snowflake Data Steward',
+        stillActiveToday: true,
+      },
+      {
+        id: 'tl-lucas-4',
+        timestamp: '2026-11-17 11:05:22',
+        kind: 'Access Grant',
+        title: 'Recertified Snowflake Data Steward & Compliance Auditor',
+        detail: 'Annual compliance attestation renewed with zero SoD conflicts.',
+        actor: 'Governance Engine',
+        system: 'Snowflake PII Lake',
+        referenceCode: 'REV-GDPR-88',
+        accessArtifact: 'Compliance Auditor',
+        stillActiveToday: true,
+      }
+    );
+  } else {
+    // Dynamically generated baseline for newly onboarded, simulated, or adopted identities
+    events.push({
+      id: `tl-dyn-hire-${person.id}`,
+      timestamp: `${person.hrStartDate} 09:00:00`,
+      kind: person.provenance ? 'Exception' : 'Employment Change',
+      title: person.provenance
+        ? `Identity Adopted From Orphaned Account (${person.provenance.originalAccountId})`
+        : `${person.type} Identity Created (${person.title})`,
+      detail: person.provenance
+        ? `Adopted by ${person.provenance.adoptedBy} from ${person.provenance.accountCorrelationSource}; authoritative source set to ${person.provenance.authoritativeSource}.`
+        : `Synchronized from ${person.sourceSystem} under ${person.department} reporting to ${person.manager}.`,
+      actor: person.provenance ? person.provenance.adoptedBy : person.sourceSystem,
+      system: person.sourceSystem,
+      referenceCode: person.provenance?.approvalReference ?? person.sourceExternalId,
+      accessArtifact: person.roles[0],
+      stillActiveToday: true,
+    });
+  }
+
+  // 2. Append any live session changeHistory events not already duplicated
+  person.changeHistory.forEach((ch) => {
+    const alreadyCovered = events.some((e) => e.timestamp === ch.timestamp);
+    if (alreadyCovered) return;
+    let kind: LifecycleTimelineEventKind = 'Employment Change';
+    if (ch.category === 'Emergency Deactivation') kind = 'Termination';
+    else if (ch.category === 'Provisioning') kind = 'Account Creation';
+    else if (ch.category === 'Context Change') kind = 'Transfer';
+    else if (ch.category === 'Role / SoD') kind = 'Access Grant';
+    else if (ch.summary.toLowerCase().includes('manager')) kind = 'Manager Change';
+
+    events.push({
+      id: `tl-hist-${ch.id}`,
+      timestamp: ch.timestamp,
+      kind,
+      title: ch.summary,
+      detail: `Live session event recorded by ${ch.source} (${ch.category}).`,
+      actor: ch.source,
+      system: ch.source,
+      changes: ch.changes,
+      stillActiveToday: kind === 'Access Grant',
+    });
+  });
+
+  // 3. Append any live Access Marketplace requests for this person
+  accessRequests
+    .filter((req) => req.targetPersonId === person.id)
+    .forEach((req) => {
+      events.push({
+        id: `tl-req-${req.id}`,
+        timestamp: req.submittedAt.includes('-') ? req.submittedAt : `2026-11-27 ${req.submittedAt}`,
+        kind: req.status === 'Approved & Provisioned' ? 'Access Grant' : 'Approval',
+        title: `${req.status}: ${req.resourceName} (${req.selectedAccountKind})`,
+        detail: `Requested by ${req.requestedByName} via ${req.workflowName}. Motivation: "${req.motivation}"`,
+        actor: req.requestedByName,
+        system: req.application,
+        referenceCode: req.requestCode,
+        accessArtifact: req.resourceName,
+        stillActiveToday: req.status === 'Approved & Provisioned',
+      });
+    });
+
+  // 4. Append completed Access Review certifications for this person
+  reviews
+    .filter((rev) => rev.personId === person.id && rev.decision !== 'Pending')
+    .forEach((rev) => {
+      events.push({
+        id: `tl-rev-${rev.id}`,
+        timestamp: rev.triggeredAt.includes('-') ? rev.triggeredAt : `2026-11-26 12:00:00`,
+        kind: 'Approval',
+        title: `Access Review ${rev.decision}: ${rev.roleOrEntitlement}`,
+        detail: `${rev.workflowType} completed by ${rev.reviewer}.`,
+        actor: rev.reviewer,
+        system: rev.application,
+        referenceCode: rev.workflowCode,
+        accessArtifact: rev.roleOrEntitlement,
+        stillActiveToday: rev.decision === 'Approved',
+      });
+    });
+
+  return events.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+}
+
+export function reconstructAccessLineage(
+  person: DemoPerson,
+  timeline: IdentityLifecycleTimelineEvent[]
+): AccessOriginReconstruction[] {
+  return person.roles.map((roleName) => {
+    const matchEvent =
+      timeline.find(
+        (e) =>
+          e.accessArtifact &&
+          (e.accessArtifact.toLowerCase().includes(roleName.toLowerCase()) ||
+            roleName.toLowerCase().includes(e.accessArtifact.toLowerCase()))
+      ) ?? timeline[timeline.length - 1];
+
+    let originType: AccessOriginReconstruction['originType'] = 'Baseline Provisioning';
+    if (person.provenance && roleName === 'Corporate SSO Standard') {
+      originType = 'Orphan Adoption';
+    } else if (roleName.toLowerCase().includes('legacy')) {
+      originType = 'Transfer / Legacy Retention';
+    } else if (matchEvent?.referenceCode?.startsWith('BR-')) {
+      originType = 'Birthright Policy';
+    } else if (matchEvent?.kind === 'Exception') {
+      originType = 'Governance Exception';
+    } else if (matchEvent?.kind === 'Approval' || matchEvent?.referenceCode?.startsWith('REQ-')) {
+      originType = 'Approved Request';
+    }
+
+    const isLegacyConflict =
+      roleName.toLowerCase().includes('legacy') && Boolean(person.sodAlert);
+
+    return {
+      artifact: roleName,
+      originType,
+      grantedOn: matchEvent?.timestamp.slice(0, 10) ?? person.hrStartDate,
+      approvedOrTriggeredBy: matchEvent?.actor ?? person.sourceSystem,
+      referenceCode: matchEvent?.referenceCode ?? person.sourceExternalId,
+      whyStillHeldToday: isLegacyConflict
+        ? `Retained after transfer from AP Operations; temporary handover exception expired and triggered ${person.sodAlert}.`
+        : originType === 'Birthright Policy'
+          ? `Identity still satisfies active ${matchEvent?.referenceCode ?? 'Birthright'} attribute/context criteria.`
+          : originType === 'Orphan Adoption'
+            ? `Granted during governed orphaned account adoption (${person.provenance?.approvalReference ?? 'APR'}) with provenance preserved.`
+            : `Approved via ${matchEvent?.actor ?? person.manager} and remains certified (${person.lastAttestation}).`,
+      riskNote: isLegacyConflict ? 'SoD Conflict — Recommended for Revocation' : undefined,
+    };
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Peer-Based Access Recommendations (Position, Dept, Responsibilities, Loc)  */
+/* -------------------------------------------------------------------------- */
+
+export interface PeerAccessRecommendation {
+  id: string;
+  resourceName: string;
+  resourceKind: MarketplaceCatalogItem['kind'];
+  application: string;
+  catalogItemId?: string;
+  confidencePct: number;
+  peerAdoptionRatio: string;
+  matchingDimensions: {
+    dimension: 'Position' | 'Department' | 'Responsibilities' | 'Location';
+    value: string;
+  }[];
+  samplePeers: { name: string; title: string; location: string }[];
+  rationale: string;
+  sodRisk: 'Clean' | 'SoD Caution';
+}
+
+export function getPeerAccessRecommendations(
+  person: DemoPerson
+): PeerAccessRecommendation[] {
+  const deptLower = person.department.toLowerCase();
+  const titleLower = person.title.toLowerCase();
+  const existingLower = person.roles.map((r) => r.toLowerCase());
+
+  const alreadyHas = (name: string) =>
+    existingLower.some(
+      (r) => r.includes(name.toLowerCase()) || name.toLowerCase().includes(r)
+    );
+
+  const recs: PeerAccessRecommendation[] = [];
+
+  if (deptLower.includes('finance') || titleLower.includes('financial') || titleLower.includes('treasury')) {
+    if (!alreadyHas('Copilot')) {
+      recs.push({
+        id: `rec-${person.id}-copilot`,
+        resourceName: 'Microsoft 365 Copilot Enterprise',
+        resourceKind: 'Entra ID License',
+        application: 'Microsoft Entra ID',
+        catalogItemId: 'cat-m365-copilot',
+        confidencePct: 94,
+        peerAdoptionRatio: '16 of 17 peers (94%)',
+        matchingDimensions: [
+          { dimension: 'Position', value: person.title },
+          { dimension: 'Department', value: person.department },
+          { dimension: 'Location', value: person.location },
+        ],
+        samplePeers: [
+          { name: 'Claire Vance', title: 'Finance Operations Lead', location: 'London, UK (HQ)' },
+          { name: 'Lerato Dlamini', title: 'Financial Accountant', location: 'Johannesburg' },
+        ],
+        rationale: `94% of colleagues in ${person.department} at ${person.location} use M365 Copilot for automated variance analysis & board pack drafting.`,
+        sodRisk: 'Clean',
+      });
+    }
+    if (!alreadyHas('Snowflake')) {
+      recs.push({
+        id: `rec-${person.id}-sf-fin`,
+        resourceName: 'Snowflake: Customer Analytics Masked Read',
+        resourceKind: 'Entitlement',
+        application: 'Snowflake PII Lake',
+        catalogItemId: 'cat-sf-pii',
+        confidencePct: 91,
+        peerAdoptionRatio: '31 of 34 peers (91%)',
+        matchingDimensions: [
+          { dimension: 'Position', value: person.title },
+          { dimension: 'Responsibilities', value: person.orgUnitName },
+          { dimension: 'Department', value: person.department },
+        ],
+        samplePeers: [
+          { name: 'Pieter van der Merwe', title: 'Financial Accountant', location: 'Johannesburg' },
+          { name: 'David Chen', title: 'Treasury Director', location: 'London, UK (HQ)' },
+        ],
+        rationale: `Shared by 91% of peers with ${person.orgUnitName} responsibilities for masked financial analytics — zero SoD risk.`,
+        sodRisk: 'Clean',
+      });
+    }
+    if (!alreadyHas('Deal Desk')) {
+      recs.push({
+        id: `rec-${person.id}-deal`,
+        resourceName: 'Salesforce · Deal Desk Approver',
+        resourceKind: 'Business Role',
+        application: 'Salesforce CRM',
+        catalogItemId: 'cat-sfdc-deal',
+        confidencePct: 83,
+        peerAdoptionRatio: '10 of 12 peers (83%)',
+        matchingDimensions: [
+          { dimension: 'Department', value: person.department },
+          { dimension: 'Responsibilities', value: 'Commercial Margin & Pricing Sign-Off' },
+          { dimension: 'Location', value: person.location },
+        ],
+        samplePeers: [
+          { name: 'Aisha Patel', title: 'Financial Analyst', location: 'London, UK (HQ)' },
+          { name: 'Sipho Ndlovu', title: 'Financial Analyst', location: 'Johannesburg' },
+        ],
+        rationale: `Used by 83% of Finance peers supporting commercial contract pricing approvals.`,
+        sodRisk: 'Clean',
+      });
+    }
+  } else if (deptLower.includes('engineering') || deptLower.includes('platform') || titleLower.includes('engineer')) {
+    recs.push(
+      {
+        id: `rec-${person.id}-aws-jit`,
+        resourceName: 'AWS Prod Vault · EKS Cluster Admin (JIT)',
+        resourceKind: 'JIT Elevation',
+        application: 'AWS Prod Vault',
+        catalogItemId: 'cat-aws-k8s',
+        confidencePct: 95,
+        peerAdoptionRatio: '19 of 20 peers (95%)',
+        matchingDimensions: [
+          { dimension: 'Position', value: person.title },
+          { dimension: 'Department', value: person.department },
+          { dimension: 'Responsibilities', value: person.orgUnitName },
+          { dimension: 'Location', value: person.location },
+        ],
+        samplePeers: [
+          { name: 'Alex Carter', title: 'VP Platform Engineering', location: 'London, UK (HQ)' },
+          { name: 'Willem Pretorius', title: 'Regional Infra Architect', location: 'Johannesburg' },
+        ],
+        rationale: `95% of Platform SRE peers hold time-bound JIT cluster elevation for incident diagnostics without standing privilege risk.`,
+        sodRisk: 'Clean',
+      },
+      {
+        id: `rec-${person.id}-sf-eng`,
+        resourceName: 'Snowflake: Customer Analytics Masked Read',
+        resourceKind: 'Entitlement',
+        application: 'Snowflake PII Lake',
+        catalogItemId: 'cat-sf-pii',
+        confidencePct: 86,
+        peerAdoptionRatio: '12 of 14 peers (86%)',
+        matchingDimensions: [
+          { dimension: 'Position', value: person.title },
+          { dimension: 'Responsibilities', value: 'Telemetry & Incident Analytics' },
+          { dimension: 'Location', value: person.location },
+        ],
+        samplePeers: [
+          { name: 'Lucas Meyer', title: 'Head of Data Governance', location: 'Zurich, CH' },
+          { name: 'Kagiso Mahlangu', title: 'Enterprise Data Engineer', location: 'Johannesburg' },
+        ],
+        rationale: `Frequently granted to senior engineering leads for production SLA & pipeline observability queries.`,
+        sodRisk: 'Clean',
+      },
+      {
+        id: `rec-${person.id}-tier1-ad`,
+        resourceName: 'SG-Tier1-Server-Operators',
+        resourceKind: 'AD Security Group',
+        application: 'Active Directory',
+        catalogItemId: 'cat-ad-sec-ops',
+        confidencePct: 79,
+        peerAdoptionRatio: '11 of 14 peers (79%)',
+        matchingDimensions: [
+          { dimension: 'Department', value: person.department },
+          { dimension: 'Responsibilities', value: person.orgUnitName },
+        ],
+        samplePeers: [
+          { name: 'Alex Carter', title: 'VP Platform Engineering', location: 'London, UK (HQ)' },
+        ],
+        rationale: `Assigned to 79% of infrastructure leads (requires Privileged Admin account targeting & dual-stage approval).`,
+        sodRisk: 'SoD Caution',
+      }
+    );
+  } else if (deptLower.includes('sales') || deptLower.includes('revenue')) {
+    recs.push(
+      {
+        id: `rec-${person.id}-sf-rev`,
+        resourceName: 'Snowflake: Customer Analytics Masked Read',
+        resourceKind: 'Entitlement',
+        application: 'Snowflake PII Lake',
+        catalogItemId: 'cat-sf-pii',
+        confidencePct: 92,
+        peerAdoptionRatio: '22 of 24 peers (92%)',
+        matchingDimensions: [
+          { dimension: 'Position', value: person.title },
+          { dimension: 'Department', value: person.department },
+          { dimension: 'Location', value: person.location },
+        ],
+        samplePeers: [
+          { name: 'Marcus Bell', title: 'VP Enterprise Sales', location: 'New York, US' },
+          { name: 'Sophia Lindstrom', title: 'CRM Commercial Consultant', location: 'EMEA' },
+        ],
+        rationale: `92% of Enterprise Account Directors use masked Snowflake pipeline analytics for quarterly ARR forecasting.`,
+        sodRisk: 'Clean',
+      },
+      {
+        id: `rec-${person.id}-copilot-sls`,
+        resourceName: 'Microsoft 365 Copilot Enterprise',
+        resourceKind: 'Entra ID License',
+        application: 'Microsoft Entra ID',
+        catalogItemId: 'cat-m365-copilot',
+        confidencePct: 88,
+        peerAdoptionRatio: '15 of 17 peers (88%)',
+        matchingDimensions: [
+          { dimension: 'Position', value: person.title },
+          { dimension: 'Responsibilities', value: person.orgUnitName },
+        ],
+        samplePeers: [
+          { name: 'Marcus Bell', title: 'VP Enterprise Sales', location: 'New York, US' },
+        ],
+        rationale: `88% of Enterprise Sales Directors hold Copilot for customer proposal generation and meeting recaps.`,
+        sodRisk: 'Clean',
+      }
+    );
+  } else {
+    recs.push(
+      {
+        id: `rec-${person.id}-sf-gen`,
+        resourceName: 'Snowflake: Customer Analytics Masked Read',
+        resourceKind: 'Entitlement',
+        application: 'Snowflake PII Lake',
+        catalogItemId: 'cat-sf-pii',
+        confidencePct: 89,
+        peerAdoptionRatio: '16 of 18 peers (89%)',
+        matchingDimensions: [
+          { dimension: 'Position', value: person.title },
+          { dimension: 'Department', value: person.department },
+          { dimension: 'Location', value: person.location },
+        ],
+        samplePeers: [
+          { name: 'Lucas Meyer', title: 'Head of Data Governance', location: 'Zurich, CH' },
+          { name: 'Priya Nair', title: 'Principal Platform Engineer', location: 'London, UK (HQ)' },
+        ],
+        rationale: `Held by 89% of peers in ${person.department} with overlapping governance & analytics responsibilities.`,
+        sodRisk: 'Clean',
+      },
+      {
+        id: `rec-${person.id}-gh-gen`,
+        resourceName: 'GitHub Enterprise · Core Repo Maintainer',
+        resourceKind: 'Business Role',
+        application: 'GitHub Enterprise',
+        catalogItemId: 'cat-gh-maint',
+        confidencePct: 82,
+        peerAdoptionRatio: '9 of 11 peers (82%)',
+        matchingDimensions: [
+          { dimension: 'Responsibilities', value: person.orgUnitName },
+          { dimension: 'Location', value: person.location },
+        ],
+        samplePeers: [
+          { name: 'Priya Nair', title: 'Principal Platform Engineer', location: 'London, UK (HQ)' },
+        ],
+        rationale: `Commonly held by peers in ${person.orgUnitName} managing policy-as-code repositories.`,
+        sodRisk: 'Clean',
+      }
+    );
+  }
+
+  return recs;
+}

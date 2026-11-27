@@ -29,6 +29,7 @@ import {
 import { INITIAL_ATTENTION_ITEMS } from '@/data/identityProcessData';
 import {
   evaluateBirthrightMatches,
+  evaluateSkuBirthrightDemand,
   type DemoSectionId,
 } from '@/data/demoSampleData';
 import { IdentraMark } from '@/components/ui/Primitives';
@@ -198,6 +199,9 @@ export function DashboardView() {
   const miningOutliers = useDemoStore((s) => s.miningOutliers);
   const roleOptimisations = useDemoStore((s) => s.roleOptimisations);
   const birthrights = useDemoStore((s) => s.birthrights);
+  const licenseSkus = useDemoStore((s) => s.licenseSkus);
+  const predictedLeavers = useDemoStore((s) => s.predictedLeavers);
+  const currency = useDemoStore((s) => s.platformConfig.governance.currencySymbol);
   const accessRequests = useDemoStore((s) => s.accessRequests);
   const contractorRequests = useDemoStore((s) => s.contractorRequests);
   const entitlementRequests = useDemoStore((s) => s.entitlementRequests);
@@ -259,6 +263,20 @@ export function DashboardView() {
   const activeBirthrights = birthrights.filter((b) => b.status === 'Active');
   const totalBirthrightDerivedGrants = activeBirthrights.reduce(
     (sum, rule) => sum + evaluateBirthrightMatches(rule, people).length * rule.grants.length,
+    0
+  );
+  const licenseEvaluations = evaluateSkuBirthrightDemand(licenseSkus, birthrights, people);
+  const totalLicensesConsumed = licenseSkus.reduce((s, k) => s + k.consumed, 0);
+  const totalLicensesPurchased = licenseSkus.reduce((s, k) => s + k.totalPurchased, 0);
+  const licenseOverrunSkus = licenseEvaluations.filter((e) => e.exceedsPool);
+  const upcomingPredictedLeavers = predictedLeavers.filter((l) => l.status !== 'Offboarded');
+  const predictedExitChangesCount = upcomingPredictedLeavers.reduce(
+    (sum, l) => sum + l.calculatedChanges.length,
+    0
+  );
+  const predictedLeaverSavingsZar = upcomingPredictedLeavers.reduce(
+    (sum, l) =>
+      sum + l.calculatedChanges.reduce((cSum, c) => cSum + (c.monthlySavingsZar ?? 0), 0),
     0
   );
 
@@ -629,6 +647,27 @@ export function DashboardView() {
             </div>
           </div>
 
+          {/* Predicted / Future Leavers Callout */}
+          <button
+            type="button"
+            onClick={() => setActiveSection('lifecycle')}
+            className="mt-3 flex w-full cursor-pointer items-center justify-between gap-2 rounded-xl border border-amber-200/80 bg-amber-50/50 px-3.5 py-2.5 text-left text-xs transition-colors hover:border-amber-300 hover:bg-amber-50"
+          >
+            <div>
+              <div className="font-semibold text-[#0F172A]">
+                {upcomingPredictedLeavers.length} Predicted Future Leavers
+              </div>
+              <div className="font-mono text-[10px] text-slate-600">
+                {predictedExitChangesCount} calculated exit changes · {currency}
+                {predictedLeaverSavingsZar.toLocaleString()}/mo license reclaim
+              </div>
+            </div>
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-white px-2 py-1 font-mono text-[10px] font-bold text-amber-800 ring-1 ring-amber-200">
+              <span>Inspect Plan</span>
+              <ArrowUpRight className="h-3 w-3" />
+            </span>
+          </button>
+
           <div className="mt-4">
             <div className="flex items-center justify-between font-mono text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
               <span>Recent events</span>
@@ -952,14 +991,29 @@ export function DashboardView() {
             </div>
           </div>
 
-          <div className="mt-3.5 flex items-center justify-between border-t border-slate-100 pt-3 font-mono text-[10px] text-slate-400">
-            <span>ZAR license optimization active</span>
+          <div className="mt-3.5 flex items-center justify-between border-t border-slate-100 pt-3 font-mono text-[10px]">
             <button
               type="button"
-              onClick={() => setActiveSection('birthrights')}
+              onClick={() => setActiveSection('licenses')}
+              className={cn(
+                'inline-flex cursor-pointer items-center gap-1 font-semibold hover:underline',
+                licenseOverrunSkus.length > 0 ? 'text-rose-600' : 'text-slate-500'
+              )}
+            >
+              <span>
+                Licenses: {totalLicensesConsumed.toLocaleString()}/
+                {totalLicensesPurchased.toLocaleString()}
+                {licenseOverrunSkus.length > 0
+                  ? ` · ${licenseOverrunSkus.length} SKU overrun`
+                  : ''}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveSection('licenses')}
               className="inline-flex cursor-pointer items-center gap-1 font-semibold text-[#0284C7] hover:underline"
             >
-              <span>Manage Rules</span>
+              <span>Licenses</span>
               <ArrowUpRight className="h-3 w-3" />
             </button>
           </div>

@@ -1,12 +1,15 @@
 import { useMemo, useState } from 'react';
 import {
+  AlertTriangle,
   ArrowUpRight,
   CheckCircle2,
+  CreditCard,
   GitMerge,
   KeyRound,
   Layers,
   Play,
   Plus,
+  ShieldAlert,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
@@ -18,6 +21,9 @@ import {
 import {
   BIRTHRIGHT_ATTRIBUTE_OPTIONS,
   evaluateBirthrightMatches,
+  evaluateDraftBirthrightLicenseWarnings,
+  evaluateSkuBirthrightDemand,
+  matchGrantToLicenseSku,
   type BirthrightAttributeCondition,
   type BirthrightAttributeField,
   type BirthrightAttributeOperator,
@@ -94,6 +100,8 @@ function scopeBadgeTone(mode: BirthrightScopeMode): string {
 export function BirthrightsView() {
   const birthrights = useDemoStore((s) => s.birthrights);
   const people = useDemoStore((s) => s.people);
+  const licenseSkus = useDemoStore((s) => s.licenseSkus);
+  const currency = useDemoStore((s) => s.platformConfig.governance.currencySymbol);
   const searchQuery = useDemoStore((s) => s.searchQuery);
   const toggleBirthrightStatus = useDemoStore((s) => s.toggleBirthrightStatus);
   const addBirthrightRule = useDemoStore((s) => s.addBirthrightRule);
@@ -221,6 +229,26 @@ export function BirthrightsView() {
   const previewMatches = useMemo(
     () => evaluateBirthrightMatches(draftRulePreview, people),
     [draftRulePreview, people]
+  );
+
+  const skuEvaluations = useMemo(
+    () => evaluateSkuBirthrightDemand(licenseSkus, birthrights, people),
+    [licenseSkus, birthrights, people]
+  );
+
+  const exceededSkus = useMemo(
+    () => skuEvaluations.filter((e) => e.exceedsPool),
+    [skuEvaluations]
+  );
+
+  const draftLicenseWarnings = useMemo(
+    () =>
+      evaluateDraftBirthrightLicenseWarnings(
+        draftGrants,
+        previewMatches.length,
+        licenseSkus
+      ),
+    [draftGrants, previewMatches.length, licenseSkus]
   );
 
   const resetBuilder = () => {
@@ -363,18 +391,67 @@ export function BirthrightsView() {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            resetBuilder();
-            setBuilderOpen(true);
-          }}
-          className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-[#0EA5E9] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#0284C7]"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          <span>New Birthright Rule</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveSection('licenses')}
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:border-[#0EA5E9] hover:text-[#0284C7]"
+          >
+            <CreditCard className="h-3.5 w-3.5 text-[#0EA5E9]" />
+            <span>License Pools</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              resetBuilder();
+              setBuilderOpen(true);
+            }}
+            className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-[#0EA5E9] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#0284C7]"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>New Birthright Rule</span>
+          </button>
+        </div>
       </div>
+
+      {/* Live License Exceedance Alert Banner */}
+      {exceededSkus.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50/90 px-4 py-3.5 text-xs text-rose-950 shadow-xs">
+          <div className="flex items-start gap-2.5">
+            <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
+            <div>
+              <div className="font-mono text-[10px] font-bold tracking-wider text-rose-700 uppercase">
+                License Capacity Warning · Birthright Overrun Detected
+              </div>
+              <div className="mt-0.5">
+                {exceededSkus.map((ev) => (
+                  <span key={ev.sku.id} className="mr-3 inline-block">
+                    <strong>{ev.sku.shortLabel} ({ev.sku.skuCode})</strong>:{' '}
+                    <span className="font-mono">
+                      {ev.sku.consumed.toLocaleString()}/{ev.sku.totalPurchased.toLocaleString()} consumed
+                    </span>{' '}
+                    +{' '}
+                    <span className="font-mono font-bold text-rose-700">
+                      {ev.birthrightProjectedSeats} birthright demand
+                    </span>{' '}
+                    exceeds pool by <strong>{ev.shortfallSeats} seats</strong> ({currency}
+                    {ev.projectedOverageMonthlyZar.toLocaleString()}/mo) via{' '}
+                    {ev.contributingRules.map((r) => r.ruleCode).join(', ')}.
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveSection('licenses')}
+            className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-xl bg-rose-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-rose-700"
+          >
+            <span>Manage License Capacity</span>
+            <ArrowUpRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Compact Live KPI Strip */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -614,18 +691,51 @@ export function BirthrightsView() {
                     Automatically Provisioned Access ({rule.grants.length})
                   </div>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {rule.grants.map((grant) => (
-                      <span
-                        key={grant.id}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-sky-100 bg-sky-50/60 px-2.5 py-1 text-[11px] font-medium text-[#0284C7]"
-                      >
-                        <KeyRound className="h-3 w-3 shrink-0 text-[#0EA5E9]" />
-                        <span className="font-semibold text-[#0F172A]">{grant.name}</span>
-                        <span className="font-mono text-[9px] text-slate-500">
-                          ({grant.targetSystem})
+                    {rule.grants.map((grant) => {
+                      const matchedSku = matchGrantToLicenseSku(grant, licenseSkus);
+                      const skuEval = matchedSku
+                        ? skuEvaluations.find((e) => e.sku.id === matchedSku.id)
+                        : null;
+                      const isOverrun = Boolean(
+                        rule.status === 'Active' && skuEval?.exceedsPool
+                      );
+
+                      return (
+                        <span
+                          key={grant.id}
+                          className={cn(
+                            'inline-flex flex-wrap items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-medium',
+                            isOverrun
+                              ? 'border-rose-300 bg-rose-50 text-rose-800'
+                              : 'border-sky-100 bg-sky-50/60 text-[#0284C7]'
+                          )}
+                        >
+                          {isOverrun ? (
+                            <AlertTriangle className="h-3 w-3 shrink-0 text-rose-600" />
+                          ) : (
+                            <KeyRound className="h-3 w-3 shrink-0 text-[#0EA5E9]" />
+                          )}
+                          <span className="font-semibold text-[#0F172A]">{grant.name}</span>
+                          <span className="font-mono text-[9px] text-slate-500">
+                            ({grant.targetSystem})
+                          </span>
+                          {skuEval && (
+                            <span
+                              className={cn(
+                                'rounded px-1.5 py-0.5 font-mono text-[9px] font-bold',
+                                isOverrun
+                                  ? 'bg-rose-200/80 text-rose-900'
+                                  : 'bg-white text-slate-600 ring-1 ring-slate-200'
+                              )}
+                            >
+                              {skuEval.sku.consumed.toLocaleString()}/
+                              {skuEval.sku.totalPurchased.toLocaleString()} consumed
+                              {isOverrun ? ` · Exceeds by ${skuEval.shortfallSeats}` : ''}
+                            </span>
+                          )}
                         </span>
-                      </span>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -1236,15 +1346,28 @@ export function BirthrightsView() {
                   <div key={grant.id} className="grid grid-cols-1 gap-2 sm:grid-cols-12">
                     <select
                       value={grant.kind}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const nextKind = e.target.value as BirthrightGrant['kind'];
+                        const defaultSku = licenseSkus[0];
                         setDraftGrants((prev) =>
                           prev.map((row) =>
                             row.id === grant.id
-                              ? { ...row, kind: e.target.value as BirthrightGrant['kind'] }
+                              ? {
+                                  ...row,
+                                  kind: nextKind,
+                                  name:
+                                    nextKind === 'License SKU' && defaultSku
+                                      ? defaultSku.name
+                                      : row.name,
+                                  targetSystem:
+                                    nextKind === 'License SKU' && defaultSku
+                                      ? defaultSku.application
+                                      : row.targetSystem,
+                                }
                               : row
                           )
-                        )
-                      }
+                        );
+                      }}
                       className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 sm:col-span-3"
                     >
                       <option value="Business Role">Business Role</option>
@@ -1253,19 +1376,46 @@ export function BirthrightsView() {
                       <option value="License SKU">License SKU</option>
                     </select>
 
-                    <input
-                      type="text"
-                      value={grant.name}
-                      onChange={(e) =>
-                        setDraftGrants((prev) =>
-                          prev.map((row) =>
-                            row.id === grant.id ? { ...row, name: e.target.value } : row
+                    {grant.kind === 'License SKU' ? (
+                      <select
+                        value={grant.name}
+                        onChange={(e) => {
+                          const picked = licenseSkus.find((s) => s.name === e.target.value);
+                          setDraftGrants((prev) =>
+                            prev.map((row) =>
+                              row.id === grant.id
+                                ? {
+                                    ...row,
+                                    name: e.target.value,
+                                    targetSystem: picked?.application ?? row.targetSystem,
+                                  }
+                                : row
+                            )
+                          );
+                        }}
+                        className="rounded-lg border border-sky-200 bg-sky-50/40 px-2.5 py-1.5 font-mono text-[11px] font-semibold text-[#0F172A] sm:col-span-5"
+                      >
+                        {licenseSkus.map((s) => (
+                          <option key={s.id} value={s.name}>
+                            {s.name} ({s.consumed.toLocaleString()}/{s.totalPurchased.toLocaleString()} consumed)
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={grant.name}
+                        onChange={(e) =>
+                          setDraftGrants((prev) =>
+                            prev.map((row) =>
+                              row.id === grant.id ? { ...row, name: e.target.value } : row
+                            )
                           )
-                        )
-                      }
-                      placeholder="Role / group / license name..."
-                      className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 sm:col-span-5"
-                    />
+                        }
+                        placeholder="Role / group / license name..."
+                        className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 sm:col-span-5"
+                      />
+                    )}
 
                     <div className="flex gap-1.5 sm:col-span-4">
                       <select
@@ -1302,6 +1452,59 @@ export function BirthrightsView() {
                     </div>
                   </div>
                 ))}
+
+                {/* Live License Pool Capacity Warning inside Builder */}
+                {draftLicenseWarnings.length > 0 && (
+                  <div className="space-y-2 pt-1">
+                    {draftLicenseWarnings.map((w) => (
+                      <div
+                        key={w.skuId}
+                        className={cn(
+                          'flex items-start gap-2.5 rounded-xl border px-3.5 py-2.5 text-xs',
+                          w.exceedsPool
+                            ? 'border-rose-300 bg-rose-50 text-rose-950'
+                            : w.nearLimit
+                              ? 'border-amber-300 bg-amber-50 text-amber-950'
+                              : 'border-emerald-200 bg-emerald-50/70 text-emerald-950'
+                        )}
+                      >
+                        {w.exceedsPool || w.nearLimit ? (
+                          <AlertTriangle
+                            className={cn(
+                              'mt-0.5 h-4 w-4 shrink-0',
+                              w.exceedsPool ? 'text-rose-600' : 'text-amber-600'
+                            )}
+                          />
+                        ) : (
+                          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                        )}
+                        <div>
+                          <div className="font-mono text-[10px] font-bold uppercase">
+                            {w.exceedsPool
+                              ? `Warning: Exceeds ${w.skuCode} License Pool by ${w.shortfallSeats} Seats`
+                              : w.nearLimit
+                                ? `Caution: ${w.skuCode} Approaching License Limit`
+                                : `${w.skuCode} License Capacity Available`}
+                          </div>
+                          <div className="mt-0.5 text-[11px]">
+                            <strong>{w.skuName}</strong> currently has{' '}
+                            <span className="font-mono font-semibold">
+                              {w.consumed.toLocaleString()} / {w.totalPurchased.toLocaleString()}
+                            </span>{' '}
+                            consumed ({w.availableSeats.toLocaleString()} available). This birthright rule projects{' '}
+                            <span className="font-mono font-bold">
+                              +{w.projectedRuleSeats} seats
+                            </span>{' '}
+                            ({w.projectedTotal.toLocaleString()} total)
+                            {w.exceedsPool
+                              ? ` — projected overage: ${currency}${w.overageMonthlyZar.toLocaleString()}/mo.`
+                              : '.'}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 

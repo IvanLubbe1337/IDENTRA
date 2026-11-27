@@ -18,13 +18,17 @@ import {
   Network,
   Shield,
   ShieldOff,
+  Sparkles,
   UserCheck,
   UserMinus,
+  Users,
   Wallet,
   X,
 } from 'lucide-react';
 import {
   getIdentityExtendedSampleValue,
+  getPeerAccessRecommendations,
+  getSelectableAccountsForPerson,
   maskSensitiveValue,
   type DemoPerson,
 } from '@/data/demoSampleData';
@@ -33,6 +37,7 @@ import {
   type ReferenceObject,
 } from '@/data/referenceObjectsData';
 import { Dialog, Tabs } from '@/components/ui/Primitives';
+import { PersonLifecycleTimelineTab } from '@/demo/views/PersonLifecycleTimelineTab';
 import { useDemoStore } from '@/store/useDemoStore';
 import { cn } from '@/lib/cn';
 
@@ -47,6 +52,8 @@ export function PersonInspectorDrawer({ person, onClose }: PersonInspectorDrawer
   const offboardPerson = useDemoStore((s) => s.offboardPerson);
   const emergencyDeactivatePerson = useDemoStore((s) => s.emergencyDeactivatePerson);
   const mitigatePersonSod = useDemoStore((s) => s.mitigatePersonSod);
+  const submitAccessRequest = useDemoStore((s) => s.submitAccessRequest);
+  const setActiveSection = useDemoStore((s) => s.setActiveSection);
   const logSensitiveFieldReveal = useDemoStore((s) => s.logSensitiveFieldReveal);
 
   const [activeTab, setActiveTab] = useState<'overview' | 'contexts' | 'access' | 'history'>(
@@ -168,6 +175,34 @@ export function PersonInspectorDrawer({ person, onClose }: PersonInspectorDrawer
         .filter((obj): obj is ReferenceObject => Boolean(obj))
     : [];
 
+  const peerRecommendations = person ? getPeerAccessRecommendations(person) : [];
+
+  const handleRequestRecommendation = (rec: ReturnType<typeof getPeerAccessRecommendations>[number]) => {
+    if (!person || !rec.catalogItemId) return;
+    const accounts = getSelectableAccountsForPerson(person);
+    const chosenAcc =
+      rec.resourceKind === 'AD Security Group' || rec.resourceKind === 'JIT Elevation'
+        ? accounts.find((a) => a.accountKind === 'Privileged Admin') ?? accounts[0]
+        : accounts[0];
+    const primaryCtxId = person.contextRefIds[0] ?? 'ctx-fin-uk-fte';
+    const ctxObj = REFERENCE_OBJECTS[primaryCtxId];
+
+    submitAccessRequest({
+      targetPersonId: person.id,
+      primaryContextId: primaryCtxId,
+      primaryContextLabel: ctxObj ? `${ctxObj.code} · ${ctxObj.name}` : primaryCtxId,
+      selectedAccountId: chosenAcc.id,
+      selectedAccountName: chosenAcc.accountName,
+      selectedAccountKind: chosenAcc.accountKind,
+      catalogItemId: rec.catalogItemId,
+      activationDate: new Date().toISOString().slice(0, 10),
+      deactivationDate: null,
+      motivation: `Peer-based recommendation (${rec.peerAdoptionRatio}): ${rec.rationale}`,
+      sodStatus: 'Clean',
+    });
+    setActiveTab('history');
+  };
+
   return (
     <Dialog.Root
       open={Boolean(person)}
@@ -240,7 +275,7 @@ export function PersonInspectorDrawer({ person, onClose }: PersonInspectorDrawer
                     )}
                   >
                     <History className="h-3.5 w-3.5" />
-                    <span>History ({person.changeHistory.length})</span>
+                    <span>Lifecycle Timeline</span>
                   </button>
 
                   <Dialog.Close asChild>
@@ -445,8 +480,8 @@ export function PersonInspectorDrawer({ person, onClose }: PersonInspectorDrawer
                       {[
                         { id: 'overview', label: 'Properties & Org' },
                         { id: 'contexts', label: `Contexts (${contexts.length})` },
-                        { id: 'access', label: `Access (${person.roles.length})` },
-                        { id: 'history', label: `History (${person.changeHistory.length})` },
+                        { id: 'access', label: `Access & Recs` },
+                        { id: 'history', label: `Lifecycle Timeline` },
                       ].map((t) => (
                         <Tabs.Trigger
                           key={t.id}
@@ -854,6 +889,93 @@ export function PersonInspectorDrawer({ person, onClose }: PersonInspectorDrawer
                       </div>
                     </div>
 
+                    {/* Peer-Based Access Recommendations (Position, Department, Responsibilities & Location) */}
+                    {peerRecommendations.length > 0 && (
+                      <div className="rounded-2xl border border-sky-200/80 bg-[#F8FBFF] p-4 text-xs">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-wider text-[#0284C7] uppercase">
+                            <Sparkles className="h-3.5 w-3.5 text-[#0EA5E9]" />
+                            <span>
+                              Recommended Access · Based on Similar Colleagues ({peerRecommendations.length})
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onClose();
+                              setActiveSection('access-marketplace');
+                            }}
+                            className="inline-flex cursor-pointer items-center gap-1 font-mono text-[10px] font-semibold text-[#0284C7] hover:underline"
+                          >
+                            <span>Marketplace</span>
+                            <ArrowUpRight className="h-3 w-3" />
+                          </button>
+                        </div>
+                        <p className="mt-1 text-[11px] text-slate-600">
+                          Predicted from colleagues matching <strong>{person.firstName}&apos;s</strong> position, department, responsibilities, and location.
+                        </p>
+
+                        <div className="mt-3 space-y-2.5">
+                          {peerRecommendations.map((rec) => (
+                            <div
+                              key={rec.id}
+                              className="rounded-xl border border-slate-200/90 bg-white p-3.5"
+                            >
+                              <div className="flex flex-wrap items-start justify-between gap-2">
+                                <div>
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <span className="font-heading text-xs font-bold text-[#0F172A]">
+                                      {rec.resourceName}
+                                    </span>
+                                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-mono text-[9px] font-bold text-emerald-700">
+                                      {rec.confidencePct}% match · {rec.peerAdoptionRatio}
+                                    </span>
+                                  </div>
+                                  <div className="mt-0.5 font-mono text-[10px] text-slate-400">
+                                    {rec.application} · {rec.resourceKind}
+                                  </div>
+                                </div>
+
+                                {rec.catalogItemId && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRequestRecommendation(rec)}
+                                    className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-lg bg-[#0EA5E9] px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-[#0284C7]"
+                                  >
+                                    <span>Request</span>
+                                    <ArrowRight className="h-3 w-3" />
+                                  </button>
+                                )}
+                              </div>
+
+                              <p className="mt-1.5 text-[11px] text-slate-600">{rec.rationale}</p>
+
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                {rec.matchingDimensions.map((d) => (
+                                  <span
+                                    key={`${rec.id}-${d.dimension}`}
+                                    className="rounded border border-sky-100 bg-sky-50/70 px-1.5 py-0.5 font-mono text-[9px] text-[#0284C7]"
+                                  >
+                                    <strong>{d.dimension}:</strong> {d.value}
+                                  </span>
+                                ))}
+                              </div>
+
+                              <div className="mt-2 flex items-center gap-1.5 font-mono text-[10px] text-slate-400">
+                                <Users className="h-3 w-3 shrink-0 text-slate-400" />
+                                <span>
+                                  Similar colleagues:{' '}
+                                  {rec.samplePeers
+                                    .map((p) => `${p.name} (${p.title} · ${p.location})`)
+                                    .join(', ')}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {person.provenance && (
                       <div className="rounded-2xl border border-sky-200/80 bg-sky-50/40 p-4 text-xs">
                         <div className="font-mono text-[10px] font-bold tracking-wider text-[#0284C7] uppercase">
@@ -935,61 +1057,12 @@ export function PersonInspectorDrawer({ person, onClose }: PersonInspectorDrawer
                     </div>
                   </Tabs.Content>
 
-                  {/* TAB 4: Full Identity Change History Timeline */}
+                  {/* TAB 4: Full Per-Identity Lifecycle Timeline & Access Lineage Reconstruction */}
                   <Tabs.Content
                     value="history"
-                    className="flex-1 space-y-3 overflow-y-auto px-6 py-5 focus:outline-none"
+                    className="flex-1 overflow-y-auto px-6 py-5 focus:outline-none"
                   >
-                    <div className="flex items-center justify-between text-xs text-slate-500">
-                      <span>
-                        Complete attribute, context, and lifecycle audit trail for{' '}
-                        <strong className="text-[#0F172A]">{person.name}</strong>.
-                      </span>
-                      <span className="font-mono text-[10px] text-[#0284C7]">
-                        {person.changeHistory.length} events
-                      </span>
-                    </div>
-
-                    <div className="space-y-3">
-                      {person.changeHistory.map((entry) => (
-                        <div
-                          key={entry.id}
-                          className="rounded-2xl border border-slate-200 bg-[#FBFDFF] p-4 text-xs"
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <span className="rounded-md bg-sky-50 px-2 py-0.5 font-mono text-[10px] font-bold text-[#0284C7]">
-                                {entry.category}
-                              </span>
-                              <span className="font-medium text-slate-600">{entry.source}</span>
-                            </div>
-                            <span className="font-mono text-[10px] text-slate-400">
-                              {entry.timestamp}
-                            </span>
-                          </div>
-
-                          <p className="mt-2 font-medium text-[#0F172A]">{entry.summary}</p>
-
-                          <div className="mt-2.5 space-y-1.5">
-                            {entry.changes.map((c, idx) => (
-                              <div
-                                key={`${entry.id}-${c.field}-${idx}`}
-                                className="flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-100 bg-white px-2.5 py-1.5 font-mono text-[10px]"
-                              >
-                                <span className="font-bold text-slate-700">{c.field}:</span>
-                                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-500">
-                                  {c.before ?? 'null'}
-                                </span>
-                                <ArrowRight className="h-3 w-3 text-[#0EA5E9]" />
-                                <span className="rounded bg-sky-50 px-1.5 py-0.5 font-semibold text-[#0369A1]">
-                                  {c.after ?? 'null'}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                    <PersonLifecycleTimelineTab person={person} />
                   </Tabs.Content>
                 </Tabs.Root>
               )}

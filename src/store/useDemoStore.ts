@@ -24,10 +24,12 @@ import {
   INITIAL_GOVERNANCE_CONTROLS,
   INITIAL_IMPORT_RUNS,
   INITIAL_LEAVE_DELEGATION,
+  INITIAL_LICENSE_SKUS,
   INITIAL_MARKETPLACE_CATALOG,
   INITIAL_MINED_ROLES,
   INITIAL_MINING_OUTLIERS,
   INITIAL_PLATFORM_CONFIG,
+  INITIAL_PREDICTED_LEAVERS,
   INITIAL_PROVISIONING_JOBS,
   INITIAL_ROLE_OPTIMISATIONS,
   INITIAL_SCHEMA_OBJECTS,
@@ -51,11 +53,13 @@ import {
   type DemoEntitlementOnboardingRequest,
   type DemoGovernanceControl,
   type DemoImportRun,
+  type DemoLicenseSku,
   type DemoMinedRoleCandidate,
   type DemoMiningOutlier,
   type DemoNonHuman,
   type DemoPerson,
   type DemoPolicy,
+  type DemoPredictedLeaver,
   type DemoProvisioningJob,
   type DemoReviewItem,
   type DemoRole,
@@ -105,6 +109,8 @@ interface DemoStore {
   miningOutliers: DemoMiningOutlier[];
   roleOptimisations: DemoRoleOptimisationItem[];
   birthrights: DemoBirthrightRule[];
+  licenseSkus: DemoLicenseSku[];
+  predictedLeavers: DemoPredictedLeaver[];
   accounts: DemoTargetAccount[];
   reviews: DemoReviewItem[];
   policies: DemoPolicy[];
@@ -313,6 +319,18 @@ interface DemoStore {
   deleteBirthrightRule: (ruleId: string) => void;
   runBirthrightReconciliation: (ruleId: string) => void;
 
+  // License SKU Inventory & Capacity actions
+  adjustLicensePool: (skuId: string, deltaSeats: number) => void;
+  reclaimInactiveLicenses: (skuId: string) => void;
+  updateLicenseSkuConfig: (
+    skuId: string,
+    patch: { totalPurchased?: number; warningThresholdPct?: number }
+  ) => void;
+
+  // Predicted / Future Leavers actions
+  stagePredictedLeaverInSimulation: (leaverId: string) => void;
+  executePredictedLeaverExitNow: (leaverId: string) => void;
+
   // Account & Orphan Remediation actions (Reporting)
   quarantineOrphanAccount: (accountId: string) => void;
   linkOrphanAccountToOwner: (accountId: string, personId: string) => void;
@@ -367,6 +385,8 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
   miningOutliers: INITIAL_MINING_OUTLIERS,
   roleOptimisations: INITIAL_ROLE_OPTIMISATIONS,
   birthrights: INITIAL_DEMO_BIRTHRIGHTS,
+  licenseSkus: INITIAL_LICENSE_SKUS,
+  predictedLeavers: INITIAL_PREDICTED_LEAVERS,
   accounts: INITIAL_DEMO_ACCOUNTS,
   reviews: INITIAL_DEMO_REVIEWS,
   policies: INITIAL_DEMO_POLICIES,
@@ -3268,6 +3288,242 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
     }));
   },
 
+  adjustLicensePool: (skuId, deltaSeats) => {
+    const sku = get().licenseSkus.find((s) => s.id === skuId);
+    if (!sku) return;
+    const nextTotal = Math.max(10, sku.totalPurchased + deltaSeats);
+    const actualDelta = nextTotal - sku.totalPurchased;
+    if (actualDelta === 0) return;
+    const stamp = timeNow();
+
+    set((s) => ({
+      licenseSkus: s.licenseSkus.map((item) =>
+        item.id === skuId ? { ...item, totalPurchased: nextTotal } : item
+      ),
+      toastMessage: `${actualDelta > 0 ? `Added +${actualDelta}` : `Reduced ${actualDelta}`} seats on ${sku.shortLabel} (${sku.skuCode}) — pool is now ${nextTotal.toLocaleString()} seats.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'License Management',
+          processTag: 'LIC-POOL',
+          tone: actualDelta > 0 ? 'emerald' : 'amber',
+          action: `Adjusted ${sku.skuCode} purchased pool from ${sku.totalPurchased.toLocaleString()} → ${nextTotal.toLocaleString()} seats`,
+          target: sku.name,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  reclaimInactiveLicenses: (skuId) => {
+    const sku = get().licenseSkus.find((s) => s.id === skuId);
+    if (!sku || sku.reclaimableInactive <= 0) return;
+    const reclaimed = sku.reclaimableInactive;
+    const monthlySavings = reclaimed * sku.monthlyCostZar;
+    const stamp = timeNow();
+
+    const empCut = Math.min(sku.licensedIdentityBreakdown.employees, Math.ceil(reclaimed * 0.7));
+    const ctrCut = Math.min(sku.licensedIdentityBreakdown.contractors, reclaimed - empCut);
+
+    set((s) => ({
+      licenseSkus: s.licenseSkus.map((item) =>
+        item.id === skuId
+          ? {
+              ...item,
+              consumed: Math.max(0, item.consumed - reclaimed),
+              reclaimableInactive: 0,
+              licensedIdentityBreakdown: {
+                ...item.licensedIdentityBreakdown,
+                employees: Math.max(0, item.licensedIdentityBreakdown.employees - empCut),
+                contractors: Math.max(0, item.licensedIdentityBreakdown.contractors - ctrCut),
+              },
+            }
+          : item
+      ),
+      toastMessage: `Reclaimed ${reclaimed} inactive ${sku.shortLabel} (${sku.skuCode}) seat(s) — saving R${monthlySavings.toLocaleString()}/mo.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'License Harvester',
+          processTag: 'LIC-RECL',
+          tone: 'emerald',
+          action: `Reclaimed ${reclaimed} inactive ${sku.skuCode} seats (R${monthlySavings.toLocaleString()}/mo saved)`,
+          target: sku.name,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  updateLicenseSkuConfig: (skuId, patch) => {
+    const sku = get().licenseSkus.find((s) => s.id === skuId);
+    if (!sku) return;
+    set((s) => ({
+      licenseSkus: s.licenseSkus.map((item) =>
+        item.id === skuId
+          ? {
+              ...item,
+              totalPurchased:
+                patch.totalPurchased !== undefined
+                  ? Math.max(10, patch.totalPurchased)
+                  : item.totalPurchased,
+              warningThresholdPct:
+                patch.warningThresholdPct !== undefined
+                  ? Math.min(99, Math.max(50, patch.warningThresholdPct))
+                  : item.warningThresholdPct,
+            }
+          : item
+      ),
+      toastMessage: `Updated license capacity settings for ${sku.shortLabel} (${sku.skuCode}).`,
+    }));
+  },
+
+  stagePredictedLeaverInSimulation: (leaverId) => {
+    const leaver = get().predictedLeavers.find((l) => l.id === leaverId);
+    if (!leaver || leaver.status !== 'Predicted') return;
+
+    const stamp = timeNow();
+    const baseNum = 9050 + get().provisioningJobs.length;
+    const targetChanges = leaver.calculatedChanges.filter(
+      (c) => c.targetSystem !== 'IDENTRA Governance'
+    );
+
+    const stagedJobs: DemoProvisioningJob[] = targetChanges.map((chg, idx) => ({
+      id: `prv-pleave-${Date.now()}-${idx}`,
+      jobCode: `PRV-${baseNum + idx}`,
+      identity: `${leaver.identityName} (Exit ${leaver.scheduledExitDate})`,
+      identityEmail: leaver.email,
+      entitlementOrRole: chg.objectName,
+      application: chg.targetSystem as DemoProvisioningJob['application'],
+      operation: chg.operation === 'Delete' || chg.operation === 'Revoke' || chg.operation === 'Reclaim' ? 'Delete' : 'Update',
+      status: 'Simulation Mode',
+      triggeredBy: `Predicted Leaver Pre-Stage (${leaver.predictionSource})`,
+      timestamp: stamp,
+      durationMs: null,
+      mappings: [
+        {
+          attribute: chg.category,
+          before: chg.beforeValue,
+          after: chg.afterValue,
+          rule: `Scheduled Exit ${leaver.scheduledExitDate} (${leaver.daysUntilExit}d remaining)`,
+        },
+      ],
+    }));
+
+    const jobCodes = stagedJobs.map((j) => j.jobCode);
+
+    set((s) => ({
+      provisioningJobs: [...stagedJobs, ...s.provisioningJobs],
+      predictedLeavers: s.predictedLeavers.map((l) =>
+        l.id === leaverId
+          ? { ...l, status: 'Pre-Staged (Simulation)', stagedJobCodes: jobCodes }
+          : l
+      ),
+      toastMessage: `Pre-staged ${stagedJobs.length} calculated exit change(s) (${jobCodes.join(', ')}) for ${leaver.identityName} in Provisioning Engine Simulation Mode.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'Lifecycle Engine',
+          processTag: 'JML-PRE',
+          tone: 'sky',
+          action: `Pre-staged ${stagedJobs.length} predicted leaver jobs (${jobCodes.join(', ')}) for scheduled exit ${leaver.scheduledExitDate}`,
+          target: leaver.identityName,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  executePredictedLeaverExitNow: (leaverId) => {
+    const leaver = get().predictedLeavers.find((l) => l.id === leaverId);
+    if (!leaver || leaver.status === 'Offboarded') return;
+
+    const stamp = timeNow();
+    const reclaimedSkuIds = leaver.calculatedChanges
+      .map((c) => c.skuId)
+      .filter((id): id is string => Boolean(id));
+    const totalSavedZar = leaver.calculatedChanges.reduce(
+      (sum, c) => sum + (c.monthlySavingsZar ?? 0),
+      0
+    );
+
+    const baseNum = 9050 + get().provisioningJobs.length;
+    const completedJobs: DemoProvisioningJob[] = leaver.calculatedChanges
+      .filter((c) => c.targetSystem !== 'IDENTRA Governance')
+      .map((chg, idx) => ({
+        id: `prv-exit-${Date.now()}-${idx}`,
+        jobCode: `PRV-${baseNum + idx}`,
+        identity: leaver.identityName,
+        identityEmail: leaver.email,
+        entitlementOrRole: chg.objectName,
+        application: chg.targetSystem as DemoProvisioningJob['application'],
+        operation:
+          chg.operation === 'Delete' || chg.operation === 'Revoke' || chg.operation === 'Reclaim'
+            ? 'Delete'
+            : 'Update',
+        status: 'Completed',
+        triggeredBy: `Early Leaver Execution (${leaver.employeeNumber})`,
+        timestamp: stamp,
+        durationMs: 220 + idx * 35,
+        mappings: [
+          {
+            attribute: chg.category,
+            before: chg.beforeValue,
+            after: chg.afterValue,
+            rule: 'Process++ Coordinated Leaver Offboarding',
+          },
+        ],
+      }));
+
+    set((s) => ({
+      predictedLeavers: s.predictedLeavers.map((l) =>
+        l.id === leaverId
+          ? {
+              ...l,
+              status: 'Offboarded',
+              stagedJobCodes: completedJobs.map((j) => j.jobCode),
+            }
+          : l
+      ),
+      provisioningJobs: [...completedJobs, ...s.provisioningJobs],
+      licenseSkus: s.licenseSkus.map((sku) =>
+        reclaimedSkuIds.includes(sku.id)
+          ? {
+              ...sku,
+              consumed: Math.max(0, sku.consumed - 1),
+              licensedIdentityBreakdown: {
+                ...sku.licensedIdentityBreakdown,
+                employees:
+                  leaver.identityType === 'Employee'
+                    ? Math.max(0, sku.licensedIdentityBreakdown.employees - 1)
+                    : sku.licensedIdentityBreakdown.employees,
+                contractors:
+                  leaver.identityType === 'Contractor'
+                    ? Math.max(0, sku.licensedIdentityBreakdown.contractors - 1)
+                    : sku.licensedIdentityBreakdown.contractors,
+              },
+            }
+          : sku
+      ),
+      toastMessage: `Executed all ${leaver.calculatedChanges.length} calculated exit changes for ${leaver.identityName}${totalSavedZar > 0 ? ` — reclaimed R${totalSavedZar.toLocaleString()}/mo in licenses` : ''}.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'Lifecycle Engine',
+          processTag: 'JML-EXIT',
+          tone: 'emerald',
+          action: `Executed ${leaver.calculatedChanges.length} calculated leaver changes${totalSavedZar > 0 ? ` & reclaimed R${totalSavedZar.toLocaleString()}/mo` : ''}`,
+          target: leaver.identityName,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
   retryEmailNotification: (emailId) => {
     const email = get().emailNotifications.find((e) => e.id === emailId);
     if (!email) return;
@@ -4713,6 +4969,8 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
       miningOutliers: INITIAL_MINING_OUTLIERS,
       roleOptimisations: INITIAL_ROLE_OPTIMISATIONS,
       birthrights: INITIAL_DEMO_BIRTHRIGHTS,
+      licenseSkus: INITIAL_LICENSE_SKUS,
+      predictedLeavers: INITIAL_PREDICTED_LEAVERS,
       accounts: INITIAL_DEMO_ACCOUNTS,
       reviews: INITIAL_DEMO_REVIEWS,
       policies: INITIAL_DEMO_POLICIES,

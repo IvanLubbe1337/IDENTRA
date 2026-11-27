@@ -13,6 +13,7 @@ import {
   UserPlus,
 } from 'lucide-react';
 import { WORKFLOW_SIMULATIONS } from '@/data/identityProcessData';
+import { PredictedLeaversPanel } from '@/demo/views/PredictedLeaversPanel';
 import { useDemoStore } from '@/store/useDemoStore';
 import { cn } from '@/lib/cn';
 
@@ -55,17 +56,25 @@ export function LifecycleView() {
   ];
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-7">
       <div>
         <h1 className="font-display text-2xl font-extrabold text-[#0F172A]">
-          Lifecycle Orchestration &amp; Live Scenarios
+          Lifecycle Orchestration &amp; Predictive JML
         </h1>
         <p className="text-sm text-slate-500">
-          Launch interactive Identity Process++ proof-of-concept scenarios and watch IDENTRA update identities, policies, and audit logs live.
+          Monitor predicted future leavers with their full calculated offboarding impact, or launch interactive Identity Process++ lifecycle scenarios.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      {/* Predicted / Future Leavers & Calculated Exit Impact */}
+      <PredictedLeaversPanel />
+
+      {/* Interactive POC Scenarios */}
+      <div className="space-y-3">
+        <div className="font-mono text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+          Interactive JML Proof-of-Concept Scenarios
+        </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {scenarios.map((sc) => {
           const Icon = sc.icon;
           return (
@@ -99,6 +108,7 @@ export function LifecycleView() {
             </div>
           );
         })}
+        </div>
       </div>
     </div>
   );

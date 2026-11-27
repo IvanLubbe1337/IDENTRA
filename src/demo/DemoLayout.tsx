@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   ClipboardCheck,
   Cpu,
+  CreditCard,
   DownloadCloud,
   FileCheck2,
   GitBranch,
@@ -34,7 +35,10 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import type { DemoSectionId } from '@/data/demoSampleData';
+import {
+  evaluateSkuBirthrightDemand,
+  type DemoSectionId,
+} from '@/data/demoSampleData';
 import { IdentraMark } from '@/components/ui/Primitives';
 import { useDemoStore } from '@/store/useDemoStore';
 import { useSceneStore } from '@/store/useSceneStore';
@@ -50,6 +54,7 @@ import {
 import { AccessMarketplaceView } from '@/demo/views/AccessMarketplaceView';
 import { RoleMiningView } from '@/demo/views/RoleMiningView';
 import { BirthrightsView } from '@/demo/views/BirthrightsView';
+import { LicensesView } from '@/demo/views/LicensesView';
 import {
   AccessReviewsView,
   ComplianceView,
@@ -103,6 +108,7 @@ const SIDEBAR_NAV: NavGroup[] = [
       { id: 'roles', label: 'Roles', icon: Shield },
       { id: 'role-mining', label: 'Role Mining', icon: Sparkles },
       { id: 'birthrights', label: 'Birthrights', icon: GitMerge },
+      { id: 'licenses', label: 'Licenses', icon: CreditCard },
     ],
   },
   {
@@ -211,6 +217,15 @@ export function DemoLayout() {
   const pendingAccessRequests = useDemoStore(
     (s) => s.accessRequests.filter((r) => r.status === 'Pending Approval').length
   );
+  const licenseOverrunCount = useDemoStore(
+    (s) =>
+      evaluateSkuBirthrightDemand(s.licenseSkus, s.birthrights, s.people).filter(
+        (e) => e.exceedsPool
+      ).length
+  );
+  const predictedLeaversCount = useDemoStore(
+    (s) => s.predictedLeavers.filter((l) => l.status !== 'Offboarded').length
+  );
   const totalMyTasksCount = pendingAccessRequests + pendingReviews + pendingOnboarding;
 
   // Auto-dismiss live Process++ toast notifications
@@ -226,7 +241,9 @@ export function DemoLayout() {
     if (id === 'my-tasks' && totalMyTasksCount > 0) return totalMyTasksCount;
     if (id === 'orphan-adoption' && orphanedAccounts > 0) return orphanedAccounts;
     if (id === 'onboarding' && pendingOnboarding > 0) return pendingOnboarding;
+    if (id === 'lifecycle' && predictedLeaversCount > 0) return predictedLeaversCount;
     if (id === 'role-mining' && miningOutliersCount > 0) return miningOutliersCount;
+    if (id === 'licenses' && licenseOverrunCount > 0) return licenseOverrunCount;
     if (id === 'governance-assurance' && assuranceViolations > 0) return assuranceViolations;
     if (id === 'access-reviews' && pendingReviews > 0) return pendingReviews;
     if (id === 'policies-sod' && activeViolations > 0) return activeViolations;
@@ -262,6 +279,8 @@ export function DemoLayout() {
         return <RoleMiningView />;
       case 'birthrights':
         return <BirthrightsView />;
+      case 'licenses':
+        return <LicensesView />;
       case 'governance-assurance':
         return <GovernanceAssuranceView />;
       case 'access-reviews':
