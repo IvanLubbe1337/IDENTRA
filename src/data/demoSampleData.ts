@@ -8485,6 +8485,222 @@ export const INITIAL_AD_OUS: DemoOrganizationalUnit[] = [
     complianceFlags: ['Discovered in AD — Not Yet Formally Governed (Owner Unassigned)'],
     lastAttestedAt: null,
   },
+  {
+    id: 'ou-companies',
+    objectGuid: '37ad503b-e8dc-4733-6cbd-00fb661c6012',
+    name: 'Companies',
+    distinguishedName: 'OU=Companies,DC=corp,DC=identra,DC=net',
+    parentOuId: null,
+    parentDn: 'DC=corp,DC=identra,DC=net',
+    description: 'Multi-entity corporate hierarchy governed by Policy-Driven OU Assignment.',
+    domain: 'corp.identra.net',
+    businessOwner: 'Identity Operations',
+    technicalCustodian: 'Alex Carter',
+    createdDate: '2024-01-12',
+    lastModified: '2026-11-26',
+    childCounts: { users: 0, groups: 2, computers: 0 },
+    governanceState: 'Managed',
+    riskScore: 10,
+    containsPrivilegedAccounts: false,
+    namingCompliant: true,
+    inheritanceBlocked: false,
+    gpoLinks: [{ name: 'GPO-Baseline-Workstation-Hardening', enforced: true, status: 'Enabled' }],
+    delegatedPermissions: [],
+    complianceFlags: [],
+    lastAttestedAt: '2026-11-20',
+  },
+  {
+    id: 'ou-comp-a',
+    objectGuid: '48be614c-f9ed-4844-7dce-110c772d7013',
+    name: 'CompanyA',
+    distinguishedName: 'OU=CompanyA,OU=Companies,DC=corp,DC=identra,DC=net',
+    parentOuId: 'ou-companies',
+    parentDn: 'OU=Companies,DC=corp,DC=identra,DC=net',
+    description: 'Company A legal entity container housing Finance and IT child OUs.',
+    domain: 'corp.identra.net',
+    businessOwner: 'Claire Vance',
+    technicalCustodian: 'Alex Carter',
+    createdDate: '2024-01-12',
+    lastModified: '2026-11-26',
+    childCounts: { users: 0, groups: 4, computers: 0 },
+    governanceState: 'Managed',
+    riskScore: 12,
+    containsPrivilegedAccounts: false,
+    namingCompliant: true,
+    inheritanceBlocked: false,
+    gpoLinks: [{ name: 'GPO-CompanyA-Standard', enforced: true, status: 'Enabled' }],
+    delegatedPermissions: [],
+    complianceFlags: [],
+    lastAttestedAt: '2026-11-20',
+  },
+  {
+    id: 'ou-comp-a-fin',
+    objectGuid: '59cf725d-0afe-4955-8edf-221d883e8014',
+    name: 'Finance',
+    distinguishedName: 'OU=Finance,OU=CompanyA,OU=Companies,DC=corp,DC=identra,DC=net',
+    parentOuId: 'ou-comp-a',
+    parentDn: 'OU=CompanyA,OU=Companies,DC=corp,DC=identra,DC=net',
+    description: 'Company A Finance permanent staff assigned via OU Policy OUP-101.',
+    domain: 'corp.identra.net',
+    businessOwner: 'Claire Vance',
+    technicalCustodian: 'Priya Nair',
+    createdDate: '2024-01-12',
+    lastModified: '2026-11-26',
+    childCounts: { users: 130, groups: 14, computers: 128 },
+    governanceState: 'Managed',
+    riskScore: 14,
+    containsPrivilegedAccounts: false,
+    namingCompliant: true,
+    inheritanceBlocked: false,
+    gpoLinks: [{ name: 'GPO-SOX-Finance-Session-Timeout', enforced: true, status: 'Enabled' }],
+    delegatedPermissions: [],
+    complianceFlags: [],
+    lastAttestedAt: '2026-11-20',
+  },
+  {
+    id: 'ou-comp-a-it',
+    objectGuid: '6ad0836e-1b0f-4a66-9fe0-332e994f9015',
+    name: 'IT',
+    distinguishedName: 'OU=IT,OU=CompanyA,OU=Companies,DC=corp,DC=identra,DC=net',
+    parentOuId: 'ou-comp-a',
+    parentDn: 'OU=CompanyA,OU=Companies,DC=corp,DC=identra,DC=net',
+    description: 'Company A IT staff assigned via OU Policy OUP-102.',
+    domain: 'corp.identra.net',
+    businessOwner: 'Alex Carter',
+    technicalCustodian: 'Priya Nair',
+    createdDate: '2024-01-12',
+    lastModified: '2026-11-26',
+    childCounts: { users: 94, groups: 18, computers: 102 },
+    governanceState: 'Managed',
+    riskScore: 18,
+    containsPrivilegedAccounts: false,
+    namingCompliant: true,
+    inheritanceBlocked: false,
+    gpoLinks: [{ name: 'GPO-Engineering-FIDO2-Required', enforced: true, status: 'Enabled' }],
+    delegatedPermissions: [],
+    complianceFlags: [],
+    lastAttestedAt: '2026-11-20',
+  },
+  {
+    id: 'ou-comp-b',
+    objectGuid: '7be1947f-2c10-4b77-a0f1-443faa50a016',
+    name: 'CompanyB',
+    distinguishedName: 'OU=CompanyB,OU=Companies,DC=corp,DC=identra,DC=net',
+    parentOuId: 'ou-companies',
+    parentDn: 'OU=Companies,DC=corp,DC=identra,DC=net',
+    description: 'Company B subsidiary container housing Finance and IT child OUs.',
+    domain: 'corp.identra.net',
+    businessOwner: 'David Chen',
+    technicalCustodian: 'Alex Carter',
+    createdDate: '2024-03-01',
+    lastModified: '2026-11-26',
+    childCounts: { users: 0, groups: 3, computers: 0 },
+    governanceState: 'Managed',
+    riskScore: 12,
+    containsPrivilegedAccounts: false,
+    namingCompliant: true,
+    inheritanceBlocked: false,
+    gpoLinks: [{ name: 'GPO-CompanyB-Standard', enforced: true, status: 'Enabled' }],
+    delegatedPermissions: [],
+    complianceFlags: [],
+    lastAttestedAt: '2026-11-20',
+  },
+  {
+    id: 'ou-comp-b-fin',
+    objectGuid: '8cf2a580-3d21-4c88-b102-5540bb61b017',
+    name: 'Finance',
+    distinguishedName: 'OU=Finance,OU=CompanyB,OU=Companies,DC=corp,DC=identra,DC=net',
+    parentOuId: 'ou-comp-b',
+    parentDn: 'OU=CompanyB,OU=Companies,DC=corp,DC=identra,DC=net',
+    description: 'Company B Finance team assigned via OU Policy OUP-103.',
+    domain: 'corp.identra.net',
+    businessOwner: 'David Chen',
+    technicalCustodian: 'Priya Nair',
+    createdDate: '2024-03-01',
+    lastModified: '2026-11-26',
+    childCounts: { users: 68, groups: 9, computers: 66 },
+    governanceState: 'Managed',
+    riskScore: 15,
+    containsPrivilegedAccounts: false,
+    namingCompliant: true,
+    inheritanceBlocked: false,
+    gpoLinks: [{ name: 'GPO-SOX-Finance-Session-Timeout', enforced: true, status: 'Enabled' }],
+    delegatedPermissions: [],
+    complianceFlags: [],
+    lastAttestedAt: '2026-11-20',
+  },
+  {
+    id: 'ou-comp-b-it',
+    objectGuid: '9d03b691-4e32-4d99-c213-6651cc72c018',
+    name: 'IT',
+    distinguishedName: 'OU=IT,OU=CompanyB,OU=Companies,DC=corp,DC=identra,DC=net',
+    parentOuId: 'ou-comp-b',
+    parentDn: 'OU=CompanyB,OU=Companies,DC=corp,DC=identra,DC=net',
+    description: 'Company B IT division assigned via OU Policy OUP-104.',
+    domain: 'corp.identra.net',
+    businessOwner: 'Alex Carter',
+    technicalCustodian: 'Priya Nair',
+    createdDate: '2024-03-01',
+    lastModified: '2026-11-26',
+    childCounts: { users: 54, groups: 11, computers: 58 },
+    governanceState: 'Managed',
+    riskScore: 16,
+    containsPrivilegedAccounts: false,
+    namingCompliant: true,
+    inheritanceBlocked: false,
+    gpoLinks: [{ name: 'GPO-Engineering-FIDO2-Required', enforced: true, status: 'Enabled' }],
+    delegatedPermissions: [],
+    complianceFlags: [],
+    lastAttestedAt: '2026-11-20',
+  },
+  {
+    id: 'ou-staging',
+    objectGuid: 'ae14c7a2-5f43-4eaa-d324-7762dd83d019',
+    name: 'Staging',
+    distinguishedName: 'OU=Staging,DC=corp,DC=identra,DC=net',
+    parentOuId: null,
+    parentDn: 'DC=corp,DC=identra,DC=net',
+    description: 'Staging root for default fallback containers when identities match zero OU policies.',
+    domain: 'corp.identra.net',
+    businessOwner: 'Identity Operations',
+    technicalCustodian: 'Alex Carter',
+    createdDate: '2022-01-10',
+    lastModified: '2026-11-26',
+    childCounts: { users: 0, groups: 0, computers: 0 },
+    governanceState: 'Managed',
+    riskScore: 12,
+    containsPrivilegedAccounts: false,
+    namingCompliant: true,
+    inheritanceBlocked: false,
+    gpoLinks: [],
+    delegatedPermissions: [],
+    complianceFlags: [],
+    lastAttestedAt: '2026-11-20',
+  },
+  {
+    id: 'ou-unclassified',
+    objectGuid: 'bf25d8b3-6054-4fbb-e435-8873ee94e020',
+    name: 'Unclassified',
+    distinguishedName: 'OU=Unclassified,OU=Staging,DC=corp,DC=identra,DC=net',
+    parentOuId: 'ou-staging',
+    parentDn: 'OU=Staging,DC=corp,DC=identra,DC=net',
+    description: 'Default fallback OU for accounts matching zero active OU Assignment Policies.',
+    domain: 'corp.identra.net',
+    businessOwner: 'Identity Operations',
+    technicalCustodian: 'Alex Carter',
+    createdDate: '2022-01-10',
+    lastModified: '2026-11-26',
+    childCounts: { users: 3, groups: 0, computers: 0 },
+    governanceState: 'Managed',
+    riskScore: 16,
+    containsPrivilegedAccounts: false,
+    namingCompliant: true,
+    inheritanceBlocked: false,
+    gpoLinks: [{ name: 'GPO-Restricted-Staging-Baseline', enforced: true, status: 'Enabled' }],
+    delegatedPermissions: [],
+    complianceFlags: [],
+    lastAttestedAt: '2026-11-20',
+  },
 ];
 
 export const INITIAL_OU_REQUESTS: DemoOuProvisioningRequest[] = [
@@ -8530,3 +8746,436 @@ export const INITIAL_OU_REQUESTS: DemoOuProvisioningRequest[] = [
     ],
   },
 ];
+
+/* -------------------------------------------------------------------------- */
+/* Policy-Driven OU Assignment Policies, Overrides & Pre-Activation Simulator */
+/* -------------------------------------------------------------------------- */
+
+export type OuPolicyAttributeField =
+  | 'department'
+  | 'company'
+  | 'employeeType'
+  | 'lifecycleStatus'
+  | 'location';
+
+export interface OuAssignmentCondition {
+  id: string;
+  field: OuPolicyAttributeField;
+  operator: 'Equals' | 'Not Equals' | 'Contains';
+  value: string;
+}
+
+export interface OuPolicySimulationMove {
+  id: string;
+  identityName: string;
+  employeeNumber: string;
+  currentOuShort: string;
+  targetOuShort: string;
+  reason: string;
+  status: 'Move Required' | 'Conflict';
+  conflictWithPolicy?: string;
+}
+
+export interface DemoOuAssignmentPolicy {
+  id: string;
+  code: string;
+  name: string;
+  status: 'Active' | 'Draft' | 'Paused';
+  priority: number; // Higher priority wins (e.g., 200 Leaver > 150 Contractor > 100 Business Unit)
+  domain: string;
+  filters: OuAssignmentCondition[];
+  targetOuId: string;
+  targetOuShort: string;
+  targetDn: string;
+  behaviour: {
+    autoAssignOnMatch: boolean;
+    reEvaluateOnAttributeChange: boolean;
+    removePreviousWhenInapplicable: boolean;
+    moveAdAccountAutomatically: boolean;
+  };
+  simulationBaseline: {
+    matchedCount: number;
+    conflictsCount: number;
+    accountsToMove: number;
+    alreadyCompliant: number;
+    proposedMoves: OuPolicySimulationMove[];
+  };
+}
+
+export interface DemoManualOuOverride {
+  id: string;
+  approvalReference: string;
+  identityName: string;
+  employeeNumber: string;
+  normalPolicyName: string;
+  normalPolicyOuShort: string;
+  overrideTargetOuId: string;
+  overrideTargetDn: string;
+  overrideTargetShort: string;
+  reason: string;
+  approvedBy: string;
+  expiresOn: string;
+  status: 'Active Exception' | 'Revoked';
+}
+
+export const DEFAULT_FALLBACK_OU_DN =
+  'OU=Unclassified,OU=Staging,DC=corp,DC=identra,DC=net';
+
+export const INITIAL_OU_ASSIGNMENT_POLICIES: DemoOuAssignmentPolicy[] = [
+  {
+    id: 'oup-fin-a',
+    code: 'OUP-101',
+    name: 'Finance – Company A',
+    status: 'Active',
+    priority: 100,
+    domain: 'corp.identra.net',
+    filters: [
+      { id: 'f-1', field: 'department', operator: 'Equals', value: 'Finance' },
+      { id: 'f-2', field: 'company', operator: 'Equals', value: 'Company A' },
+      { id: 'f-3', field: 'employeeType', operator: 'Equals', value: 'Permanent' },
+    ],
+    targetOuId: 'ou-comp-a-fin',
+    targetOuShort: 'CompanyA/Finance',
+    targetDn: 'OU=Finance,OU=CompanyA,OU=Companies,DC=corp,DC=identra,DC=net',
+    behaviour: {
+      autoAssignOnMatch: true,
+      reEvaluateOnAttributeChange: true,
+      removePreviousWhenInapplicable: true,
+      moveAdAccountAutomatically: true,
+    },
+    simulationBaseline: {
+      matchedCount: 142,
+      conflictsCount: 3,
+      accountsToMove: 12,
+      alreadyCompliant: 130,
+      proposedMoves: [
+        {
+          id: 'pm-1',
+          identityName: 'John Smith',
+          employeeNumber: 'EMP-10912',
+          currentOuShort: 'CompanyA/IT',
+          targetOuShort: 'CompanyA/Finance',
+          reason: 'Department transferred from IT → Finance',
+          status: 'Move Required',
+        },
+        {
+          id: 'pm-2',
+          identityName: 'Jane Doe',
+          employeeNumber: 'EMP-10944',
+          currentOuShort: 'Default (Unclassified)',
+          targetOuShort: 'CompanyA/Finance',
+          reason: 'New Finance hire currently in Staging/Unclassified',
+          status: 'Move Required',
+        },
+        {
+          id: 'pm-3',
+          identityName: 'Mark Jones',
+          employeeNumber: 'EMP-10602',
+          currentOuShort: 'CompanyB/Finance',
+          targetOuShort: 'CompanyA/Finance',
+          reason: 'Legal entity updated from Company B → Company A',
+          status: 'Move Required',
+        },
+        {
+          id: 'pm-4',
+          identityName: 'Naledi Khumalo',
+          employeeNumber: 'EMP-10788',
+          currentOuShort: 'CompanyA/IT',
+          targetOuShort: 'CompanyA/Finance',
+          reason: 'Matches equal-priority dual-hatted IT & Finance policy (Priority 100)',
+          status: 'Conflict',
+          conflictWithPolicy: 'OUP-102 · IT – Company A (Priority 100)',
+        },
+      ],
+    },
+  },
+  {
+    id: 'oup-it-a',
+    code: 'OUP-102',
+    name: 'IT – Company A',
+    status: 'Active',
+    priority: 100,
+    domain: 'corp.identra.net',
+    filters: [
+      { id: 'f-4', field: 'department', operator: 'Equals', value: 'IT' },
+      { id: 'f-5', field: 'company', operator: 'Equals', value: 'Company A' },
+      { id: 'f-6', field: 'employeeType', operator: 'Equals', value: 'Permanent' },
+    ],
+    targetOuId: 'ou-comp-a-it',
+    targetOuShort: 'CompanyA/IT',
+    targetDn: 'OU=IT,OU=CompanyA,OU=Companies,DC=corp,DC=identra,DC=net',
+    behaviour: {
+      autoAssignOnMatch: true,
+      reEvaluateOnAttributeChange: true,
+      removePreviousWhenInapplicable: true,
+      moveAdAccountAutomatically: true,
+    },
+    simulationBaseline: {
+      matchedCount: 98,
+      conflictsCount: 0,
+      accountsToMove: 4,
+      alreadyCompliant: 94,
+      proposedMoves: [
+        {
+          id: 'pm-it-1',
+          identityName: 'Rohan Naidoo',
+          employeeNumber: 'EMP-10877',
+          currentOuShort: 'Default (Unclassified)',
+          targetOuShort: 'CompanyA/IT',
+          reason: 'New IT permanent joiner matched OUP-102',
+          status: 'Move Required',
+        },
+      ],
+    },
+  },
+  {
+    id: 'oup-fin-b',
+    code: 'OUP-103',
+    name: 'Finance – Company B',
+    status: 'Active',
+    priority: 100,
+    domain: 'corp.identra.net',
+    filters: [
+      { id: 'f-7', field: 'department', operator: 'Equals', value: 'Finance' },
+      { id: 'f-8', field: 'company', operator: 'Equals', value: 'Company B' },
+      { id: 'f-9', field: 'employeeType', operator: 'Equals', value: 'Permanent' },
+    ],
+    targetOuId: 'ou-comp-b-fin',
+    targetOuShort: 'CompanyB/Finance',
+    targetDn: 'OU=Finance,OU=CompanyB,OU=Companies,DC=corp,DC=identra,DC=net',
+    behaviour: {
+      autoAssignOnMatch: true,
+      reEvaluateOnAttributeChange: true,
+      removePreviousWhenInapplicable: true,
+      moveAdAccountAutomatically: true,
+    },
+    simulationBaseline: {
+      matchedCount: 71,
+      conflictsCount: 0,
+      accountsToMove: 3,
+      alreadyCompliant: 68,
+      proposedMoves: [
+        {
+          id: 'pm-fb-1',
+          identityName: 'Chantal du Plessis',
+          employeeNumber: 'EMP-10540',
+          currentOuShort: 'CompanyA/Finance',
+          targetOuShort: 'CompanyB/Finance',
+          reason: 'Transferred from Company A to Company B subsidiary',
+          status: 'Move Required',
+        },
+      ],
+    },
+  },
+  {
+    id: 'oup-it-b',
+    code: 'OUP-104',
+    name: 'IT – Company B',
+    status: 'Active',
+    priority: 100,
+    domain: 'corp.identra.net',
+    filters: [
+      { id: 'f-10', field: 'department', operator: 'Equals', value: 'IT' },
+      { id: 'f-11', field: 'company', operator: 'Equals', value: 'Company B' },
+      { id: 'f-12', field: 'employeeType', operator: 'Equals', value: 'Permanent' },
+    ],
+    targetOuId: 'ou-comp-b-it',
+    targetOuShort: 'CompanyB/IT',
+    targetDn: 'OU=IT,OU=CompanyB,OU=Companies,DC=corp,DC=identra,DC=net',
+    behaviour: {
+      autoAssignOnMatch: true,
+      reEvaluateOnAttributeChange: true,
+      removePreviousWhenInapplicable: true,
+      moveAdAccountAutomatically: true,
+    },
+    simulationBaseline: {
+      matchedCount: 57,
+      conflictsCount: 0,
+      accountsToMove: 3,
+      alreadyCompliant: 54,
+      proposedMoves: [
+        {
+          id: 'pm-itb-1',
+          identityName: 'Sipho Dlamini',
+          employeeNumber: 'EMP-10691',
+          currentOuShort: 'CompanyA/Finance',
+          targetOuShort: 'CompanyB/IT',
+          reason: 'Mover: Company A Finance → Company B IT',
+          status: 'Move Required',
+        },
+      ],
+    },
+  },
+  {
+    id: 'oup-leavers',
+    code: 'OUP-105',
+    name: 'Leavers & Disabled Quarantine',
+    status: 'Active',
+    priority: 200,
+    domain: 'corp.identra.net',
+    filters: [
+      { id: 'f-13', field: 'lifecycleStatus', operator: 'Equals', value: 'Leaver' },
+    ],
+    targetOuId: 'ou-disabled',
+    targetOuShort: 'DisabledUsers',
+    targetDn: 'OU=DisabledUsers,DC=corp,DC=identra,DC=net',
+    behaviour: {
+      autoAssignOnMatch: true,
+      reEvaluateOnAttributeChange: true,
+      removePreviousWhenInapplicable: true,
+      moveAdAccountAutomatically: true,
+    },
+    simulationBaseline: {
+      matchedCount: 414,
+      conflictsCount: 0,
+      accountsToMove: 2,
+      alreadyCompliant: 412,
+      proposedMoves: [
+        {
+          id: 'pm-lv-1',
+          identityName: 'Mark Wilson',
+          employeeNumber: 'CTR-90114',
+          currentOuShort: 'External Contractors',
+          targetOuShort: 'DisabledUsers',
+          reason: 'Lifecycle Status = Leaver (Priority 200 supersedes business unit OUs)',
+          status: 'Move Required',
+        },
+      ],
+    },
+  },
+  {
+    id: 'oup-contractors',
+    code: 'OUP-106',
+    name: 'External Contractors Isolation',
+    status: 'Active',
+    priority: 150,
+    domain: 'corp.identra.net',
+    filters: [
+      { id: 'f-14', field: 'employeeType', operator: 'Equals', value: 'Contractor' },
+    ],
+    targetOuId: 'ou-contractors',
+    targetOuShort: 'External Contractors',
+    targetDn: 'OU=External Contractors,DC=corp,DC=identra,DC=net',
+    behaviour: {
+      autoAssignOnMatch: true,
+      reEvaluateOnAttributeChange: true,
+      removePreviousWhenInapplicable: true,
+      moveAdAccountAutomatically: true,
+    },
+    simulationBaseline: {
+      matchedCount: 86,
+      conflictsCount: 0,
+      accountsToMove: 2,
+      alreadyCompliant: 84,
+      proposedMoves: [
+        {
+          id: 'pm-ct-1',
+          identityName: 'Thabo Mokoena',
+          employeeNumber: 'CTR-90342',
+          currentOuShort: 'Default (Unclassified)',
+          targetOuShort: 'External Contractors',
+          reason: 'Contractor isolation policy (Priority 150)',
+          status: 'Move Required',
+        },
+      ],
+    },
+  },
+];
+
+export const INITIAL_MANUAL_OU_OVERRIDES: DemoManualOuOverride[] = [
+  {
+    id: 'ov-1',
+    approvalReference: 'EXC-OU-301',
+    identityName: 'Elena Vance',
+    employeeNumber: 'EMP-10219',
+    normalPolicyName: 'Finance – Company A (OUP-101)',
+    normalPolicyOuShort: 'CompanyA/Finance',
+    overrideTargetOuId: 'ou-fin-lon',
+    overrideTargetDn: 'OU=Finance - London,OU=Departments,DC=corp,DC=identra,DC=net',
+    overrideTargetShort: 'Departments/Finance - London',
+    reason: 'Temporary SOX London Treasury GPO alignment during EMEA payments migration.',
+    approvedBy: 'David Chen (Treasury Director)',
+    expiresOn: '2027-02-28',
+    status: 'Active Exception',
+  },
+];
+
+export interface OuLifecycleIdentityProfile {
+  company: string;
+  department: string;
+  employeeType: string;
+  lifecycleStatus: 'Active' | 'Joiner' | 'Mover' | 'Leaver' | 'Rehire';
+  location: string;
+}
+
+export interface OuAssignmentResolution {
+  outcome: 'Policy Match' | 'Priority Conflict (Exception)' | 'Default Fallback OU';
+  winningPolicy: DemoOuAssignmentPolicy | null;
+  conflictingPolicies: DemoOuAssignmentPolicy[];
+  allMatchingPolicies: DemoOuAssignmentPolicy[];
+  resolvedOuShort: string;
+  resolvedDn: string;
+  explanation: string;
+}
+
+export function evaluateOuAssignmentForProfile(
+  profile: OuLifecycleIdentityProfile,
+  policies: DemoOuAssignmentPolicy[],
+  fallbackDn: string
+): OuAssignmentResolution {
+  const activePolicies = policies.filter((p) => p.status === 'Active');
+
+  const matchesCondition = (cond: OuAssignmentCondition): boolean => {
+    const val = String(profile[cond.field] ?? '').toLowerCase();
+    const target = cond.value.trim().toLowerCase();
+    if (cond.operator === 'Equals') return val === target;
+    if (cond.operator === 'Not Equals') return val !== target;
+    return val.includes(target);
+  };
+
+  const matched = activePolicies.filter(
+    (pol) => pol.filters.length > 0 && pol.filters.every(matchesCondition)
+  );
+
+  if (matched.length === 0) {
+    return {
+      outcome: 'Default Fallback OU',
+      winningPolicy: null,
+      conflictingPolicies: [],
+      allMatchingPolicies: [],
+      resolvedOuShort: 'Staging/Unclassified (Fallback)',
+      resolvedDn: fallbackDn,
+      explanation:
+        'No active OU Assignment Policy matched — assigned to configured Default Fallback OU to prevent arbitrary container placement.',
+    };
+  }
+
+  const maxPriority = Math.max(...matched.map((m) => m.priority));
+  const topPolicies = matched.filter((m) => m.priority === maxPriority);
+
+  if (topPolicies.length > 1) {
+    return {
+      outcome: 'Priority Conflict (Exception)',
+      winningPolicy: null,
+      conflictingPolicies: topPolicies,
+      allMatchingPolicies: matched,
+      resolvedOuShort: 'HOLD · Conflict Exception',
+      resolvedDn: fallbackDn,
+      explanation: `Multiple policies matched at identical effective priority (${maxPriority}): ${topPolicies.map((p) => p.code).join(' vs ')}. Provisioning held in Exception state until priority or filters are resolved.`,
+    };
+  }
+
+  const winner = topPolicies[0];
+  return {
+    outcome: 'Policy Match',
+    winningPolicy: winner,
+    conflictingPolicies: [],
+    allMatchingPolicies: matched,
+    resolvedOuShort: winner.targetOuShort,
+    resolvedDn: winner.targetDn,
+    explanation:
+      matched.length > 1
+        ? `Resolved single target OU via ${winner.code} (Priority ${winner.priority}), superseding lower-priority match(es).`
+        : `Single deterministic policy match: ${winner.code} (${winner.name}, Priority ${winner.priority}).`,
+  };
+}

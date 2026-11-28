@@ -19,6 +19,7 @@ import {
   RefreshCw,
   ShieldAlert,
   ShieldCheck,
+  SlidersHorizontal,
   Trash2,
   UserCheck,
   Users,
@@ -29,10 +30,11 @@ import type {
   OuGovernanceState,
 } from '@/data/demoSampleData';
 import { Dialog, Tabs } from '@/components/ui/Primitives';
+import { OuAssignmentPoliciesTab } from '@/demo/views/OuAssignmentPoliciesTab';
 import { useDemoStore } from '@/store/useDemoStore';
 import { cn } from '@/lib/cn';
 
-type TabId = 'hierarchy' | 'provisioning' | 'compliance';
+type TabId = 'hierarchy' | 'policies' | 'provisioning' | 'compliance';
 type StateFilter = 'All' | OuGovernanceState | 'Privileged' | 'Empty';
 
 const OWNER_OPTIONS = [
@@ -59,6 +61,7 @@ function stateBadge(state: OuGovernanceState): string {
 export function AdStructuralGovernanceView() {
   const adOus = useDemoStore((s) => s.adOus);
   const ouRequests = useDemoStore((s) => s.ouRequests);
+  const ouAssignmentPolicies = useDemoStore((s) => s.ouAssignmentPolicies);
   const searchQuery = useDemoStore((s) => s.searchQuery);
   const runAdOuDiscoveryScan = useDemoStore((s) => s.runAdOuDiscoveryScan);
   const governOrganizationalUnit = useDemoStore((s) => s.governOrganizationalUnit);
@@ -77,6 +80,10 @@ export function AdStructuralGovernanceView() {
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({
     'ou-root-depts': true,
     'ou-tier0': true,
+    'ou-companies': true,
+    'ou-comp-a': true,
+    'ou-comp-b': true,
+    'ou-staging': true,
   });
 
   // Modals: Request New OU, Govern/Assign Owner, Relocate OU
@@ -381,6 +388,12 @@ export function AdStructuralGovernanceView() {
               label: 'OU Hierarchy & Inspector',
               icon: FolderTree,
               badge: metrics.total,
+            },
+            {
+              id: 'policies' as const,
+              label: 'OU Assignment Policies',
+              icon: SlidersHorizontal,
+              badge: ouAssignmentPolicies.filter((p) => p.status === 'Active').length,
             },
             {
               id: 'provisioning' as const,
@@ -805,6 +818,13 @@ export function AdStructuralGovernanceView() {
               </div>
             )}
           </div>
+        </Tabs.Content>
+
+        {/* TAB 1B: POLICY-DRIVEN OU ASSIGNMENT POLICIES */}
+        <Tabs.Content value="policies" className="focus:outline-none">
+          <OuAssignmentPoliciesTab
+            onOpenOuProvisioning={() => setActiveTab('provisioning')}
+          />
         </Tabs.Content>
 
         {/* TAB 2: GOVERNED OU PROVISIONING THROUGH IGA */}

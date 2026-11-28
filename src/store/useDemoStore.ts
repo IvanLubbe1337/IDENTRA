@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import {
   CONTRACTOR_ONBOARDING_WORKFLOWS,
   CURRENT_DEMO_USER_PERSON_ID,
+  DEFAULT_FALLBACK_OU_DN,
   ENTITLEMENT_ONBOARDING_WORKFLOWS,
   INITIAL_ACCESS_REQUESTS,
   INITIAL_AD_OUS,
@@ -26,9 +27,11 @@ import {
   INITIAL_IMPORT_RUNS,
   INITIAL_LEAVE_DELEGATION,
   INITIAL_LICENSE_SKUS,
+  INITIAL_MANUAL_OU_OVERRIDES,
   INITIAL_MARKETPLACE_CATALOG,
   INITIAL_MINED_ROLES,
   INITIAL_MINING_OUTLIERS,
+  INITIAL_OU_ASSIGNMENT_POLICIES,
   INITIAL_OU_REQUESTS,
   INITIAL_PLATFORM_CONFIG,
   INITIAL_PREDICTED_LEAVERS,
@@ -56,10 +59,12 @@ import {
   type DemoGovernanceControl,
   type DemoImportRun,
   type DemoLicenseSku,
+  type DemoManualOuOverride,
   type DemoMinedRoleCandidate,
   type DemoMiningOutlier,
   type DemoNonHuman,
   type DemoOrganizationalUnit,
+  type DemoOuAssignmentPolicy,
   type DemoOuProvisioningRequest,
   type DemoPerson,
   type DemoPolicy,
@@ -121,6 +126,9 @@ interface DemoStore {
   governanceControls: DemoGovernanceControl[];
   adOus: DemoOrganizationalUnit[];
   ouRequests: DemoOuProvisioningRequest[];
+  ouAssignmentPolicies: DemoOuAssignmentPolicy[];
+  manualOuOverrides: DemoManualOuOverride[];
+  defaultFallbackOuDn: string;
   emptyEntitlements: DemoEmptyEntitlement[];
   contractorRequests: DemoContractorOnboardingRequest[];
   entitlementRequests: DemoEntitlementOnboardingRequest[];
@@ -361,6 +369,36 @@ interface DemoStore {
     decision: 'approve-stage' | 'approve-all' | 'reject'
   ) => void;
 
+  // Policy-Driven OU Assignment actions
+  toggleOuPolicyStatus: (policyId: string) => void;
+  updateOuPolicyPriority: (policyId: string, priority: number) => void;
+  createOuAssignmentPolicy: (input: {
+    name: string;
+    priority: number;
+    targetOuId: string;
+    filters: DemoOuAssignmentPolicy['filters'];
+  }) => void;
+  commitOuPolicySimulation: (policyId: string) => void;
+  executeLifecycleOuMove: (input: {
+    identityLabel: string;
+    fromOuShort: string;
+    toOuShort: string;
+    toDn: string;
+    policyCode: string;
+  }) => void;
+  updateDefaultFallbackOu: (dn: string) => void;
+  addManualOuOverride: (input: {
+    identityName: string;
+    employeeNumber: string;
+    normalPolicyName: string;
+    normalPolicyOuShort: string;
+    overrideTargetOuId: string;
+    reason: string;
+    approvedBy: string;
+    expiresOn: string;
+  }) => void;
+  revokeManualOuOverride: (overrideId: string) => void;
+
   // Account & Orphan Remediation actions (Reporting)
   quarantineOrphanAccount: (accountId: string) => void;
   linkOrphanAccountToOwner: (accountId: string, personId: string) => void;
@@ -423,6 +461,9 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
   governanceControls: INITIAL_GOVERNANCE_CONTROLS,
   adOus: INITIAL_AD_OUS,
   ouRequests: INITIAL_OU_REQUESTS,
+  ouAssignmentPolicies: INITIAL_OU_ASSIGNMENT_POLICIES,
+  manualOuOverrides: INITIAL_MANUAL_OU_OVERRIDES,
+  defaultFallbackOuDn: DEFAULT_FALLBACK_OU_DN,
   emptyEntitlements: INITIAL_EMPTY_ENTITLEMENTS,
   contractorRequests: INITIAL_CONTRACTOR_REQUESTS,
   entitlementRequests: INITIAL_ENTITLEMENT_REQUESTS,
@@ -4167,6 +4208,306 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
     }));
   },
 
+  toggleOuPolicyStatus: (policyId) => {
+    const pol = get().ouAssignmentPolicies.find((p) => p.id === policyId);
+    if (!pol) return;
+    const nextStatus: DemoOuAssignmentPolicy['status'] =
+      pol.status === 'Active' ? 'Paused' : 'Active';
+    set((s) => ({
+      ouAssignmentPolicies: s.ouAssignmentPolicies.map((p) =>
+        p.id === policyId ? { ...p, status: nextStatus } : p
+      ),
+      toastMessage: `${nextStatus === 'Active' ? 'Activated' : 'Paused'} OU Assignment Policy ${pol.code} (${pol.name}).`,
+    }));
+  },
+
+  updateOuPolicyPriority: (policyId, priority) => {
+    const pol = get().ouAssignmentPolicies.find((p) => p.id === policyId);
+    if (!pol) return;
+    const clamped = Math.max(10, Math.min(999, priority));
+    set((s) => ({
+      ouAssignmentPolicies: s.ouAssignmentPolicies.map((p) =>
+        p.id === policyId ? { ...p, priority: clamped } : p
+      ),
+      toastMessage: `Updated ${pol.code} (${pol.name}) priority to ${clamped}.`,
+    }));
+  },
+
+  createOuAssignmentPolicy: (input) => {
+    const targetOu = get().adOus.find((o) => o.id === input.targetOuId);
+    if (!targetOu) {
+      set({
+        toastMessage:
+          'Blocked: Target OU does not exist in AD inventory. Create it via OU Provisioning Requests first.',
+      });
+      return;
+    }
+
+    const code = `OUP-${101 + get().ouAssignmentPolicies.length}`;
+    const stamp = timeNow();
+    const shortPath = targetOu.distinguishedName
+      .split(',')
+      .filter((seg) => seg.startsWith('OU='))
+      .map((seg) => seg.replace('OU=', ''))
+      .reverse()
+      .slice(-2)
+      .join('/');
+
+    const newPol: DemoOuAssignmentPolicy = {
+      id: `oup-custom-${Date.now()}`,
+      code,
+      name: input.name.trim(),
+      status: 'Active',
+      priority: input.priority,
+      domain: targetOu.domain,
+      filters: input.filters,
+      targetOuId: targetOu.id,
+      targetOuShort: shortPath || targetOu.name,
+      targetDn: targetOu.distinguishedName,
+      behaviour: {
+        autoAssignOnMatch: true,
+        reEvaluateOnAttributeChange: true,
+        removePreviousWhenInapplicable: true,
+        moveAdAccountAutomatically: true,
+      },
+      simulationBaseline: {
+        matchedCount: 18,
+        conflictsCount: 0,
+        accountsToMove: 4,
+        alreadyCompliant: 14,
+        proposedMoves: [
+          {
+            id: `pm-cust-${Date.now()}`,
+            identityName: 'Thabo Mokoena',
+            employeeNumber: 'CTR-90342',
+            currentOuShort: 'Default (Unclassified)',
+            targetOuShort: shortPath || targetOu.name,
+            reason: `Matched newly created policy ${code}`,
+            status: 'Move Required',
+          },
+        ],
+      },
+    };
+
+    set((s) => ({
+      ouAssignmentPolicies: [newPol, ...s.ouAssignmentPolicies],
+      toastMessage: `Created OU Assignment Policy ${code} ("${newPol.name}", Priority ${newPol.priority}) → ${newPol.targetOuShort}.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'OU Policy Engine',
+          processTag: 'OUP-NEW',
+          tone: 'emerald',
+          action: `Created OU Assignment Policy ${code} (Priority ${newPol.priority}) targeting ${newPol.targetDn}`,
+          target: newPol.name,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  commitOuPolicySimulation: (policyId) => {
+    const pol = get().ouAssignmentPolicies.find((p) => p.id === policyId);
+    if (!pol) return;
+    const moves = pol.simulationBaseline.proposedMoves.filter(
+      (m) => m.status === 'Move Required'
+    );
+    if (moves.length === 0) return;
+
+    const stamp = timeNow();
+    const baseNum = 9050 + get().provisioningJobs.length;
+    const newJobs: DemoProvisioningJob[] = moves.map((mv, idx) => ({
+      id: `prv-ou-pol-${Date.now()}-${idx}`,
+      jobCode: `PRV-${baseNum + idx}`,
+      identity: `${mv.identityName} (${mv.employeeNumber})`,
+      identityEmail: `${mv.identityName.toLowerCase().replace(/\s+/g, '.')}@identra-corp.io`,
+      entitlementOrRole: `OU Policy Move (${pol.code}): ${mv.currentOuShort} → ${mv.targetOuShort}`,
+      application: 'Active Directory',
+      operation: 'Update',
+      status: 'Completed',
+      triggeredBy: `OU Assignment Policy ${pol.code} (${pol.name})`,
+      timestamp: stamp,
+      durationMs: 210 + idx * 30,
+      mappings: [
+        {
+          attribute: 'distinguishedName',
+          before: mv.currentOuShort,
+          after: pol.targetDn,
+          rule: `Policy ${pol.code} · Priority ${pol.priority}`,
+        },
+      ],
+    }));
+
+    set((s) => ({
+      provisioningJobs: [...newJobs, ...s.provisioningJobs],
+      ouAssignmentPolicies: s.ouAssignmentPolicies.map((p) =>
+        p.id === policyId
+          ? {
+              ...p,
+              simulationBaseline: {
+                ...p.simulationBaseline,
+                alreadyCompliant:
+                  p.simulationBaseline.alreadyCompliant +
+                  p.simulationBaseline.accountsToMove,
+                accountsToMove: 0,
+                proposedMoves: p.simulationBaseline.proposedMoves.filter(
+                  (m) => m.status === 'Conflict'
+                ),
+              },
+            }
+          : p
+      ),
+      toastMessage: `Executed ${newJobs.length} AD account move job(s) (${newJobs.map((j) => j.jobCode).join(', ')}) for ${pol.code}; ${pol.simulationBaseline.conflictsCount} conflict(s) held in exception state.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'OU Policy Engine',
+          processTag: 'OUP-EXEC',
+          tone: 'emerald',
+          action: `Executed ${newJobs.length} simulated OU account relocations for ${pol.code} → ${pol.targetOuShort}`,
+          target: pol.name,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  executeLifecycleOuMove: (input) => {
+    const stamp = timeNow();
+    const jobCode = `PRV-${9050 + get().provisioningJobs.length}`;
+    const moveJob: DemoProvisioningJob = {
+      id: `prv-ou-lc-${Date.now()}`,
+      jobCode,
+      identity: input.identityLabel,
+      identityEmail: 'lifecycle-sim@identra-corp.io',
+      entitlementOrRole: `OU Reassignment (${input.policyCode}): ${input.fromOuShort} → ${input.toOuShort}`,
+      application: 'Active Directory',
+      operation: 'Update',
+      status: 'Completed',
+      triggeredBy: `Policy-Driven OU Lifecycle Re-Evaluation (${input.policyCode})`,
+      timestamp: stamp,
+      durationMs: 235,
+      mappings: [
+        {
+          attribute: 'parentOU',
+          before: input.fromOuShort,
+          after: input.toDn,
+          rule: `Auto-relocated on attribute change (${input.policyCode})`,
+        },
+      ],
+    };
+
+    set((s) => ({
+      provisioningJobs: [moveJob, ...s.provisioningJobs],
+      toastMessage: `Executed AD account move ${jobCode}: ${input.fromOuShort} → ${input.toOuShort} (${input.policyCode}).`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'OU Policy Engine',
+          processTag: 'OUP-MOVE',
+          tone: 'emerald',
+          action: `Moved AD account (${jobCode}): ${input.fromOuShort} → ${input.toOuShort} via ${input.policyCode}`,
+          target: input.identityLabel,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  updateDefaultFallbackOu: (dn) => {
+    const stamp = timeNow();
+    set((s) => ({
+      defaultFallbackOuDn: dn,
+      toastMessage: `Updated Default Fallback OU to ${dn}.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'OU Policy Engine',
+          processTag: 'OUP-DEF',
+          tone: 'sky',
+          action: `Set default unmatched fallback container to ${dn}`,
+          target: 'Default OU Policy',
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  addManualOuOverride: (input) => {
+    const targetOu = get().adOus.find((o) => o.id === input.overrideTargetOuId);
+    if (!targetOu) return;
+    const stamp = timeNow();
+    const ref = `EXC-OU-${301 + get().manualOuOverrides.length}`;
+    const shortPath = targetOu.distinguishedName
+      .split(',')
+      .filter((seg) => seg.startsWith('OU='))
+      .map((seg) => seg.replace('OU=', ''))
+      .reverse()
+      .slice(-2)
+      .join('/');
+
+    const newOv: DemoManualOuOverride = {
+      id: `ov-${Date.now()}`,
+      approvalReference: ref,
+      identityName: input.identityName.trim(),
+      employeeNumber: input.employeeNumber.trim() || 'EMP-10841',
+      normalPolicyName: input.normalPolicyName,
+      normalPolicyOuShort: input.normalPolicyOuShort,
+      overrideTargetOuId: targetOu.id,
+      overrideTargetDn: targetOu.distinguishedName,
+      overrideTargetShort: shortPath || targetOu.name,
+      reason: input.reason.trim(),
+      approvedBy: input.approvedBy.trim(),
+      expiresOn: input.expiresOn,
+      status: 'Active Exception',
+    };
+
+    set((s) => ({
+      manualOuOverrides: [newOv, ...s.manualOuOverrides],
+      toastMessage: `Registered approved Manual OU Override (${ref}) for ${newOv.identityName} → ${newOv.overrideTargetShort}.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: newOv.approvedBy,
+          processTag: 'OUP-EXC',
+          tone: 'amber',
+          action: `Approved explicit Manual OU Override (${ref}) → ${newOv.overrideTargetDn} (expires ${newOv.expiresOn})`,
+          target: newOv.identityName,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  revokeManualOuOverride: (overrideId) => {
+    const ov = get().manualOuOverrides.find((o) => o.id === overrideId);
+    if (!ov) return;
+    const stamp = timeNow();
+    set((s) => ({
+      manualOuOverrides: s.manualOuOverrides.map((o) =>
+        o.id === overrideId ? { ...o, status: 'Revoked' } : o
+      ),
+      toastMessage: `Revoked Manual OU Override (${ov.approvalReference}) — ${ov.identityName} returned to automated OU policy evaluation.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'OU Policy Engine',
+          processTag: 'OUP-REV',
+          tone: 'sky',
+          action: `Revoked Manual OU Override (${ov.approvalReference}); restored automated policy evaluation`,
+          target: ov.identityName,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
   retryEmailNotification: (emailId) => {
     const email = get().emailNotifications.find((e) => e.id === emailId);
     if (!email) return;
@@ -5620,6 +5961,9 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
       governanceControls: INITIAL_GOVERNANCE_CONTROLS,
       adOus: INITIAL_AD_OUS,
       ouRequests: INITIAL_OU_REQUESTS,
+      ouAssignmentPolicies: INITIAL_OU_ASSIGNMENT_POLICIES,
+      manualOuOverrides: INITIAL_MANUAL_OU_OVERRIDES,
+      defaultFallbackOuDn: DEFAULT_FALLBACK_OU_DN,
       emptyEntitlements: INITIAL_EMPTY_ENTITLEMENTS,
       contractorRequests: INITIAL_CONTRACTOR_REQUESTS,
       entitlementRequests: INITIAL_ENTITLEMENT_REQUESTS,
