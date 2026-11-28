@@ -12,6 +12,7 @@ export type DemoSectionId =
   | 'licenses'
   | 'access-marketplace'
   | 'governance-assurance'
+  | 'ad-structural-governance'
   | 'access-reviews'
   | 'policies-sod'
   | 'compliance'
@@ -5995,6 +5996,71 @@ export const INITIAL_SCHEMA_OBJECTS: DemoSchemaObject[] = [
       },
     ],
   },
+  {
+    id: 'obj-ou',
+    code: 'OBJ-ORG-UNIT',
+    name: 'Organizational Unit (AD)',
+    apiName: 'organizational_unit',
+    category: 'Core System Object',
+    description:
+      'Hierarchical Active Directory container governed by AD Structural Governance and correlated via immutable objectGUID.',
+    recordCount: 11,
+    properties: [
+      {
+        id: 'prop-ou-guid',
+        key: 'objectGuid',
+        label: 'Object GUID (Immutable Key)',
+        type: 'String',
+        required: true,
+        unique: true,
+        sensitive: false,
+        maskPattern: 'Full Mask (••••••••)',
+        systemProperty: true,
+        defaultSampleValue: 'a4f8c910-7b2e-4f19-9c04-18273645abcd',
+        description: 'Immutable AD correlation identifier resilient to OU renames and moves.',
+      },
+      {
+        id: 'prop-ou-dn',
+        key: 'distinguishedName',
+        label: 'Distinguished Name (DN)',
+        type: 'String',
+        required: true,
+        unique: true,
+        sensitive: false,
+        maskPattern: 'Full Mask (••••••••)',
+        systemProperty: true,
+        defaultSampleValue: 'OU=Departments,DC=corp,DC=identra,DC=net',
+      },
+      {
+        id: 'prop-ou-owner',
+        key: 'businessOwner',
+        label: 'OU Business Owner (Managed By)',
+        type: 'Reference (Identity)',
+        referenceTargetObjectId: 'obj-identity',
+        required: true,
+        unique: false,
+        sensitive: false,
+        maskPattern: 'Full Mask (••••••••)',
+        systemProperty: true,
+        defaultSampleValue: 'Claire Vance',
+        description: 'Accountable Business Owner Identity reference for OU approvals & attestations.',
+      },
+      {
+        id: 'prop-ou-custodian',
+        key: 'technicalCustodian',
+        label: 'AD Technical Custodian',
+        type: 'Reference (Identity)',
+        referenceTargetObjectId: 'obj-identity',
+        required: true,
+        unique: false,
+        sensitive: false,
+        maskPattern: 'Full Mask (••••••••)',
+        systemProperty: true,
+        defaultSampleValue: 'Alex Carter',
+        description: 'Infrastructure Identity reference approving AD structural changes.',
+      },
+    ],
+  },
 ];
 
 /* -------------------------------------------------------------------------- */
@@ -7920,3 +7986,547 @@ export function getPeerAccessRecommendations(
 
   return recs;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Active Directory Structural Governance (Managed Organizational Units)      */
+/* -------------------------------------------------------------------------- */
+
+export type OuGovernanceState = 'Managed' | 'Discovered' | 'Non-Compliant';
+
+export interface OuDelegatedPermission {
+  id: string;
+  principal: string;
+  principalType: 'Group' | 'User' | 'Service Account';
+  rights: string;
+  inherited: boolean;
+  excessive: boolean;
+  reviewedOn: string;
+}
+
+export interface OuGpoLink {
+  name: string;
+  enforced: boolean;
+  status: 'Enabled' | 'Link Disabled';
+}
+
+export interface OuDriftEvent {
+  detectedAt: string;
+  kind:
+    | 'Out-of-Band Create'
+    | 'Renamed Outside Process'
+    | 'Moved Outside Process'
+    | 'Unexpected Delegation'
+    | 'Deleted in AD';
+  detail: string;
+  previousDn?: string;
+}
+
+export interface DemoOrganizationalUnit {
+  id: string;
+  objectGuid: string;
+  name: string;
+  distinguishedName: string;
+  parentOuId: string | null;
+  parentDn: string;
+  description: string;
+  domain: string;
+  businessOwner: string | null;
+  technicalCustodian: string | null;
+  createdDate: string;
+  lastModified: string;
+  childCounts: {
+    users: number;
+    groups: number;
+    computers: number;
+  };
+  governanceState: OuGovernanceState;
+  riskScore: number;
+  containsPrivilegedAccounts: boolean;
+  namingCompliant: boolean;
+  inheritanceBlocked: boolean;
+  gpoLinks: OuGpoLink[];
+  delegatedPermissions: OuDelegatedPermission[];
+  driftEvent?: OuDriftEvent;
+  complianceFlags: string[];
+  lastAttestedAt: string | null;
+}
+
+export interface OuProvisioningStage {
+  stepOrder: number;
+  label: string;
+  actor: string;
+  status: 'Completed' | 'Active' | 'Pending';
+}
+
+export interface DemoOuProvisioningRequest {
+  id: string;
+  requestCode: string;
+  ouName: string;
+  parentOuId: string;
+  parentDn: string;
+  targetDn: string;
+  businessOwner: string;
+  technicalCustodian: string;
+  purpose: string;
+  requestedBy: string;
+  submittedAt: string;
+  namingCheckPassed: boolean;
+  status: 'Pending Approval' | 'Provisioned & Governed' | 'Rejected';
+  provisionedOuId?: string;
+  provisionedGuid?: string;
+  stages: OuProvisioningStage[];
+}
+
+export const INITIAL_AD_OUS: DemoOrganizationalUnit[] = [
+  {
+    id: 'ou-root-depts',
+    objectGuid: '7b41a9e0-3d21-4c88-b102-99401f01a001',
+    name: 'Departments',
+    distinguishedName: 'OU=Departments,DC=corp,DC=identra,DC=net',
+    parentOuId: null,
+    parentDn: 'DC=corp,DC=identra,DC=net',
+    description: 'Top-level governed container for regional corporate business units and departments.',
+    domain: 'corp.identra.net',
+    businessOwner: 'Claire Vance',
+    technicalCustodian: 'Alex Carter',
+    createdDate: '2022-01-10',
+    lastModified: '2026-11-18',
+    childCounts: { users: 14, groups: 8, computers: 0 },
+    governanceState: 'Managed',
+    riskScore: 14,
+    containsPrivilegedAccounts: false,
+    namingCompliant: true,
+    inheritanceBlocked: false,
+    gpoLinks: [
+      { name: 'GPO-Baseline-Workstation-Hardening', enforced: true, status: 'Enabled' },
+      { name: 'GPO-Enterprise-Audit-Logging', enforced: false, status: 'Enabled' },
+    ],
+    delegatedPermissions: [
+      {
+        id: 'del-1',
+        principal: 'SG-AD-Identity-Provisioning-Engine',
+        principalType: 'Service Account',
+        rights: 'Create/Delete User & Group Objects (Scoped)',
+        inherited: false,
+        excessive: false,
+        reviewedOn: '2026-11-01',
+      },
+    ],
+    complianceFlags: [],
+    lastAttestedAt: '2026-11-12',
+  },
+  {
+    id: 'ou-fin-lon',
+    objectGuid: '8c52b0f1-4e32-4d99-c213-88512e02b002',
+    name: 'Finance - London',
+    distinguishedName: 'OU=Finance - London,OU=Departments,DC=corp,DC=identra,DC=net',
+    parentOuId: 'ou-root-depts',
+    parentDn: 'OU=Departments,DC=corp,DC=identra,DC=net',
+    description: 'EMEA Finance & Treasury employees based at London HQ.',
+    domain: 'corp.identra.net',
+    businessOwner: 'Claire Vance',
+    technicalCustodian: 'Priya Nair',
+    createdDate: '2022-03-14',
+    lastModified: '2026-11-23',
+    childCounts: { users: 142, groups: 24, computers: 138 },
+    governanceState: 'Managed',
+    riskScore: 18,
+    containsPrivilegedAccounts: false,
+    namingCompliant: true,
+    inheritanceBlocked: false,
+    gpoLinks: [
+      { name: 'GPO-SOX-Finance-Session-Timeout', enforced: true, status: 'Enabled' },
+      { name: 'GPO-Baseline-Workstation-Hardening', enforced: true, status: 'Enabled' },
+    ],
+    delegatedPermissions: [
+      {
+        id: 'del-2',
+        principal: 'SG-Helpdesk-EMEA-L1',
+        principalType: 'Group',
+        rights: 'Reset Password & Unlock Account Only',
+        inherited: false,
+        excessive: false,
+        reviewedOn: '2026-11-10',
+      },
+    ],
+    complianceFlags: [],
+    lastAttestedAt: '2026-11-15',
+  },
+  {
+    id: 'ou-eng-lon',
+    objectGuid: '9d63c1a2-5f43-4eaa-d324-77623d03c003',
+    name: 'Engineering - London',
+    distinguishedName: 'OU=Engineering - London,OU=Departments,DC=corp,DC=identra,DC=net',
+    parentOuId: 'ou-root-depts',
+    parentDn: 'OU=Departments,DC=corp,DC=identra,DC=net',
+    description: 'Platform SRE and Cloud Engineering staff accounts.',
+    domain: 'corp.identra.net',
+    businessOwner: 'Alex Carter',
+    technicalCustodian: 'Priya Nair',
+    createdDate: '2022-02-01',
+    lastModified: '2026-11-20',
+    childCounts: { users: 218, groups: 39, computers: 240 },
+    governanceState: 'Managed',
+    riskScore: 22,
+    containsPrivilegedAccounts: false,
+    namingCompliant: true,
+    inheritanceBlocked: false,
+    gpoLinks: [
+      { name: 'GPO-Engineering-FIDO2-Required', enforced: true, status: 'Enabled' },
+    ],
+    delegatedPermissions: [
+      {
+        id: 'del-3',
+        principal: 'SG-AD-Identity-Provisioning-Engine',
+        principalType: 'Service Account',
+        rights: 'Create/Delete User & Group Objects (Scoped)',
+        inherited: true,
+        excessive: false,
+        reviewedOn: '2026-11-01',
+      },
+    ],
+    complianceFlags: [],
+    lastAttestedAt: '2026-11-08',
+  },
+  {
+    id: 'ou-sales-ny',
+    objectGuid: 'ae74d2b3-6054-4fbb-e435-66734c04d004',
+    name: 'Sales - New York',
+    distinguishedName: 'OU=Sales - New York,OU=Departments,DC=corp,DC=identra,DC=net',
+    parentOuId: 'ou-root-depts',
+    parentDn: 'OU=Departments,DC=corp,DC=identra,DC=net',
+    description: 'North America Enterprise Sales & Revenue operations.',
+    domain: 'corp.identra.net',
+    businessOwner: 'Marcus Bell',
+    technicalCustodian: 'Alex Carter',
+    createdDate: '2023-05-19',
+    lastModified: '2026-11-24',
+    childCounts: { users: 196, groups: 19, computers: 190 },
+    governanceState: 'Non-Compliant',
+    riskScore: 76,
+    containsPrivilegedAccounts: false,
+    namingCompliant: true,
+    inheritanceBlocked: false,
+    gpoLinks: [
+      { name: 'GPO-Commercial-Laptop-BitLocker', enforced: true, status: 'Enabled' },
+    ],
+    delegatedPermissions: [
+      {
+        id: 'del-4',
+        principal: 'SG-Regional-IT-Support-US',
+        principalType: 'Group',
+        rights: 'GenericAll (Full Control on All Descendant Objects)',
+        inherited: false,
+        excessive: true,
+        reviewedOn: '2025-11-04',
+      },
+      {
+        id: 'del-5',
+        principal: 'j.davies_legacy (Orphaned User)',
+        principalType: 'User',
+        rights: 'WriteDacl & Reset Password (Unintended Direct Grant)',
+        inherited: false,
+        excessive: true,
+        reviewedOn: 'Never',
+      },
+    ],
+    driftEvent: {
+      detectedAt: '2026-11-24 14:22',
+      kind: 'Unexpected Delegation',
+      detail:
+        'Direct WriteDacl delegation added to "SG-Regional-IT-Support-US" outside approved IGA workflow.',
+    },
+    complianceFlags: [
+      'Excessive Delegated Control (GenericAll / WriteDacl)',
+      'Out-of-Band Delegation Drift',
+    ],
+    lastAttestedAt: '2026-08-19',
+  },
+  {
+    id: 'ou-tier0',
+    objectGuid: 'bf85e3c4-7165-40cc-f546-55845b05e005',
+    name: 'Tier0 - Privileged',
+    distinguishedName: 'OU=Tier0 - Privileged,DC=corp,DC=identra,DC=net',
+    parentOuId: null,
+    parentDn: 'DC=corp,DC=identra,DC=net',
+    description: 'Restricted Tier-0 container for Privileged Access Workstations, Break-Glass groups, and Domain Admins.',
+    domain: 'corp.identra.net',
+    businessOwner: 'Alex Carter',
+    technicalCustodian: 'Security Ops',
+    createdDate: '2022-01-05',
+    lastModified: '2026-11-19',
+    childCounts: { users: 18, groups: 12, computers: 22 },
+    governanceState: 'Managed',
+    riskScore: 34,
+    containsPrivilegedAccounts: true,
+    namingCompliant: true,
+    inheritanceBlocked: true,
+    gpoLinks: [
+      { name: 'GPO-Tier0-PAW-Isolation-Strict', enforced: true, status: 'Enabled' },
+      { name: 'GPO-Tier0-CredentialGuard-Enforced', enforced: true, status: 'Enabled' },
+    ],
+    delegatedPermissions: [
+      {
+        id: 'del-6',
+        principal: 'SG-Tier0-PAM-Vault-Engines',
+        principalType: 'Group',
+        rights: 'JIT Password Rotation Only (Protected ACL)',
+        inherited: false,
+        excessive: false,
+        reviewedOn: '2026-11-19',
+      },
+    ],
+    complianceFlags: [],
+    lastAttestedAt: '2026-11-19',
+  },
+  {
+    id: 'ou-tier0-admins',
+    objectGuid: 'c096f4d5-8276-41dd-0657-44956a06f006',
+    name: 'Admin Accounts',
+    distinguishedName: 'OU=Admin Accounts,OU=Tier0 - Privileged,DC=corp,DC=identra,DC=net',
+    parentOuId: 'ou-tier0',
+    parentDn: 'OU=Tier0 - Privileged,DC=corp,DC=identra,DC=net',
+    description: 'Dedicated adm-* privileged accounts governed by PAM and 90-day recertification.',
+    domain: 'corp.identra.net',
+    businessOwner: 'Alex Carter',
+    technicalCustodian: 'Priya Nair',
+    createdDate: '2022-01-06',
+    lastModified: '2026-11-19',
+    childCounts: { users: 16, groups: 4, computers: 0 },
+    governanceState: 'Managed',
+    riskScore: 28,
+    containsPrivilegedAccounts: true,
+    namingCompliant: true,
+    inheritanceBlocked: false,
+    gpoLinks: [
+      { name: 'GPO-Tier0-PAW-Isolation-Strict', enforced: true, status: 'Enabled' },
+    ],
+    delegatedPermissions: [
+      {
+        id: 'del-7',
+        principal: 'SG-Tier0-PAM-Vault-Engines',
+        principalType: 'Group',
+        rights: 'JIT Password Rotation Only (Inherited)',
+        inherited: true,
+        excessive: false,
+        reviewedOn: '2026-11-19',
+      },
+    ],
+    complianceFlags: [],
+    lastAttestedAt: '2026-11-19',
+  },
+  {
+    id: 'ou-contractors',
+    objectGuid: 'd1a705e6-9387-42ee-1768-33a679070007',
+    name: 'External Contractors',
+    distinguishedName: 'OU=External Contractors,DC=corp,DC=identra,DC=net',
+    parentOuId: null,
+    parentDn: 'DC=corp,DC=identra,DC=net',
+    description: 'Isolated OU for fixed-term B2B contractors and external auditors with hard expiry controls.',
+    domain: 'corp.identra.net',
+    businessOwner: 'Priya Nair',
+    technicalCustodian: 'Alex Carter',
+    createdDate: '2023-02-12',
+    lastModified: '2026-11-21',
+    childCounts: { users: 84, groups: 9, computers: 12 },
+    governanceState: 'Managed',
+    riskScore: 24,
+    containsPrivilegedAccounts: false,
+    namingCompliant: true,
+    inheritanceBlocked: false,
+    gpoLinks: [
+      { name: 'GPO-Contractor-Restricted-Clipboard-USB', enforced: true, status: 'Enabled' },
+    ],
+    delegatedPermissions: [
+      {
+        id: 'del-8',
+        principal: 'SG-Contractor-Onboarding-Operators',
+        principalType: 'Group',
+        rights: 'Enable/Disable & Set Account Expiry',
+        inherited: false,
+        excessive: false,
+        reviewedOn: '2026-11-05',
+      },
+    ],
+    complianceFlags: [],
+    lastAttestedAt: '2026-11-05',
+  },
+  {
+    id: 'ou-disabled',
+    objectGuid: 'e2b816f7-a498-43ff-2879-22b788081008',
+    name: 'DisabledUsers',
+    distinguishedName: 'OU=DisabledUsers,DC=corp,DC=identra,DC=net',
+    parentOuId: null,
+    parentDn: 'DC=corp,DC=identra,DC=net',
+    description: 'Quarantine container for off-boarded Leavers and Emergency Deactivated identities.',
+    domain: 'corp.identra.net',
+    businessOwner: 'Identity Operations',
+    technicalCustodian: 'Alex Carter',
+    createdDate: '2022-01-10',
+    lastModified: '2026-11-25',
+    childCounts: { users: 412, groups: 0, computers: 31 },
+    governanceState: 'Managed',
+    riskScore: 10,
+    containsPrivilegedAccounts: false,
+    namingCompliant: true,
+    inheritanceBlocked: true,
+    gpoLinks: [
+      { name: 'GPO-Deny-All-Logon-Quarantine', enforced: true, status: 'Enabled' },
+    ],
+    delegatedPermissions: [],
+    complianceFlags: [],
+    lastAttestedAt: '2026-11-20',
+  },
+  {
+    id: 'ou-shadow-ops',
+    objectGuid: 'f3c92708-b5a9-4400-398a-11c897092009',
+    name: 'tmp_infra_migration_2026',
+    distinguishedName: 'OU=tmp_infra_migration_2026,DC=corp,DC=identra,DC=net',
+    parentOuId: null,
+    parentDn: 'DC=corp,DC=identra,DC=net',
+    description: 'Temporary migration container created directly in ADUC without change ticket.',
+    domain: 'corp.identra.net',
+    businessOwner: null,
+    technicalCustodian: null,
+    createdDate: '2026-11-22',
+    lastModified: '2026-11-26',
+    childCounts: { users: 5, groups: 3, computers: 2 },
+    governanceState: 'Non-Compliant',
+    riskScore: 91,
+    containsPrivilegedAccounts: true,
+    namingCompliant: false,
+    inheritanceBlocked: true,
+    gpoLinks: [],
+    delegatedPermissions: [
+      {
+        id: 'del-9',
+        principal: 'Domain Users (Misconfigured ACL)',
+        principalType: 'Group',
+        rights: 'Create Child Computer & Write Properties',
+        inherited: false,
+        excessive: true,
+        reviewedOn: 'Never',
+      },
+    ],
+    driftEvent: {
+      detectedAt: '2026-11-26 06:10',
+      kind: 'Out-of-Band Create',
+      detail:
+        'Created directly in Active Directory outside IGA provisioning. Contains 2 privileged server admin accounts with GPO inheritance blocked.',
+    },
+    complianceFlags: [
+      'Missing Accountable Owner',
+      'Out-of-Band Structural Create',
+      'Outside Approved Naming Convention',
+      'Privileged Account in Unexpected OU',
+      'Block Inheritance Bypassing Baseline GPOs',
+    ],
+    lastAttestedAt: null,
+  },
+  {
+    id: 'ou-legacy-empty',
+    objectGuid: '04da3819-c6ba-4511-4a9b-00d9a60a3010',
+    name: 'Legacy_Branches_2023',
+    distinguishedName: 'OU=Legacy_Branches_2023,OU=Departments,DC=corp,DC=identra,DC=net',
+    parentOuId: 'ou-root-depts',
+    parentDn: 'OU=Departments,DC=corp,DC=identra,DC=net',
+    description: 'Decommissioned regional branch container — zero users, groups, or computers remaining.',
+    domain: 'corp.identra.net',
+    businessOwner: null,
+    technicalCustodian: 'Alex Carter',
+    createdDate: '2023-01-18',
+    lastModified: '2025-04-02',
+    childCounts: { users: 0, groups: 0, computers: 0 },
+    governanceState: 'Non-Compliant',
+    riskScore: 54,
+    containsPrivilegedAccounts: false,
+    namingCompliant: false,
+    inheritanceBlocked: false,
+    gpoLinks: [
+      { name: 'GPO-Legacy-Branch-Proxy', enforced: false, status: 'Link Disabled' },
+    ],
+    delegatedPermissions: [],
+    driftEvent: {
+      detectedAt: '2026-11-20 06:00',
+      kind: 'Renamed Outside Process',
+      detail: 'Renamed from "OU=Regional_Branches" outside IGA workflow; tracked cleanly via immutable objectGUID.',
+      previousDn: 'OU=Regional_Branches,OU=Departments,DC=corp,DC=identra,DC=net',
+    },
+    complianceFlags: [
+      'Empty / Abandoned OU (0 Child Objects)',
+      'Missing Accountable Owner',
+      'Outside Approved Naming Convention',
+    ],
+    lastAttestedAt: null,
+  },
+  {
+    id: 'ou-discovered-cpt',
+    objectGuid: '15eb492a-d7cb-4622-5bac-ffea550b4011',
+    name: 'Operations - Cape Town',
+    distinguishedName: 'OU=Operations - Cape Town,OU=Departments,DC=corp,DC=identra,DC=net',
+    parentOuId: 'ou-root-depts',
+    parentDn: 'OU=Departments,DC=corp,DC=identra,DC=net',
+    description: 'Newly discovered AD OU for Cape Town regional operations — awaiting formal governance onboarding.',
+    domain: 'corp.identra.net',
+    businessOwner: null,
+    technicalCustodian: null,
+    createdDate: '2026-11-25',
+    lastModified: '2026-11-27',
+    childCounts: { users: 28, groups: 6, computers: 24 },
+    governanceState: 'Discovered',
+    riskScore: 42,
+    containsPrivilegedAccounts: false,
+    namingCompliant: true,
+    inheritanceBlocked: false,
+    gpoLinks: [
+      { name: 'GPO-Baseline-Workstation-Hardening', enforced: true, status: 'Enabled' },
+    ],
+    delegatedPermissions: [],
+    complianceFlags: ['Discovered in AD — Not Yet Formally Governed (Owner Unassigned)'],
+    lastAttestedAt: null,
+  },
+];
+
+export const INITIAL_OU_REQUESTS: DemoOuProvisioningRequest[] = [
+  {
+    id: 'ou-req-jhb-fin',
+    requestCode: 'OUR-2041',
+    ouName: 'Finance - Johannesburg',
+    parentOuId: 'ou-root-depts',
+    parentDn: 'OU=Departments,DC=corp,DC=identra,DC=net',
+    targetDn: 'OU=Finance - Johannesburg,OU=Departments,DC=corp,DC=identra,DC=net',
+    businessOwner: 'Claire Vance (Finance Manager)',
+    technicalCustodian: 'Priya Nair',
+    purpose: 'Organisational container for Johannesburg finance employees.',
+    requestedBy: 'Lerato Dlamini',
+    submittedAt: '2026-11-27 14:15',
+    namingCheckPassed: true,
+    status: 'Pending Approval',
+    stages: [
+      {
+        stepOrder: 1,
+        label: 'Business Owner Approval',
+        actor: 'Claire Vance (Finance Manager)',
+        status: 'Active',
+      },
+      {
+        stepOrder: 2,
+        label: 'AD Infrastructure Approval',
+        actor: 'Alex Carter (AD Infrastructure Lead)',
+        status: 'Pending',
+      },
+      {
+        stepOrder: 3,
+        label: 'IGA Automatically Provisions OU in AD',
+        actor: 'Provisioning Engine (LDAP CREATE)',
+        status: 'Pending',
+      },
+      {
+        stepOrder: 4,
+        label: 'Discover & Correlate via objectGUID · Activate Governance',
+        actor: 'AD Structural Governance Engine',
+        status: 'Pending',
+      },
+    ],
+  },
+];

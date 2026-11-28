@@ -192,9 +192,10 @@ export function DashboardView() {
   const policies = useDemoStore((s) => s.policies);
   const people = useDemoStore((s) => s.people);
   const accounts = useDemoStore((s) => s.accounts);
-  const entitlements = useDemoStore((s) => s.entitlements);
   const emptyEntitlements = useDemoStore((s) => s.emptyEntitlements);
   const governanceControls = useDemoStore((s) => s.governanceControls);
+  const adOus = useDemoStore((s) => s.adOus);
+  const ouRequests = useDemoStore((s) => s.ouRequests);
   const minedRoles = useDemoStore((s) => s.minedRoles);
   const miningOutliers = useDemoStore((s) => s.miningOutliers);
   const roleOptimisations = useDemoStore((s) => s.roleOptimisations);
@@ -235,7 +236,8 @@ export function DashboardView() {
   const emptyDeletedCount = emptyEntitlements.filter(
     (e) => e.status === 'Deleted in Target' || e.status === 'Deletion Queued'
   ).length;
-  const driftCount = entitlements.filter((e) => e.status === 'Drift').length;
+  const adOuIssuesCount = adOus.filter((o) => o.governanceState !== 'Managed').length;
+  const pendingOuReqsCount = ouRequests.filter((r) => r.status === 'Pending Approval').length;
   const emergencyDeactivatedCount = people.filter((p) => p.jmlStatus === 'Deactivated').length;
 
   // Live Tasks, Marketplace, Onboarding & Operations
@@ -894,14 +896,26 @@ export function DashboardView() {
             </div>
           </div>
 
-          <div className="mt-3.5 flex items-center justify-between border-t border-slate-100 pt-3 font-mono text-[10px] text-slate-400">
-            <span>Direct drift grants: {driftCount}</span>
+          <div className="mt-3.5 flex items-center justify-between border-t border-slate-100 pt-3 font-mono text-[10px]">
             <button
               type="button"
-              onClick={() => openReportingTab('empty-entitlements')}
+              onClick={() => setActiveSection('ad-structural-governance')}
+              className={cn(
+                'inline-flex cursor-pointer items-center gap-1 font-semibold hover:underline',
+                adOuIssuesCount > 0 ? 'text-amber-700' : 'text-slate-500'
+              )}
+            >
+              <span>
+                AD OUs: {adOus.length} ({adOuIssuesCount} unmanaged/risk
+                {pendingOuReqsCount > 0 ? ` · ${pendingOuReqsCount} req` : ''})
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveSection('ad-structural-governance')}
               className="inline-flex cursor-pointer items-center gap-1 font-semibold text-[#0284C7] hover:underline"
             >
-              <span>Audit Reports</span>
+              <span>AD OUs</span>
               <ArrowUpRight className="h-3 w-3" />
             </button>
           </div>

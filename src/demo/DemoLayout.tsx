@@ -13,6 +13,7 @@ import {
   CreditCard,
   DownloadCloud,
   FileCheck2,
+  FolderTree,
   GitBranch,
   GitMerge,
   Inbox,
@@ -61,6 +62,7 @@ import {
   PoliciesSodView,
 } from '@/demo/views/GovernanceViews';
 import { GovernanceAssuranceView } from '@/demo/views/GovernanceAssuranceView';
+import { AdStructuralGovernanceView } from '@/demo/views/AdStructuralGovernanceView';
 import { ReportingView } from '@/demo/views/ReportingView';
 import {
   AuditLogView,
@@ -115,6 +117,7 @@ const SIDEBAR_NAV: NavGroup[] = [
     group: 'GOVERNANCE',
     items: [
       { id: 'governance-assurance', label: 'Governance Assurance', icon: ShieldCheck },
+      { id: 'ad-structural-governance', label: 'AD Structural Gov', icon: FolderTree },
       { id: 'access-reviews', label: 'Access reviews', icon: ClipboardCheck },
       { id: 'policies-sod', label: 'Policies & SoD', icon: ShieldAlert },
       { id: 'compliance', label: 'Compliance', icon: FileCheck2 },
@@ -226,6 +229,11 @@ export function DemoLayout() {
   const predictedLeaversCount = useDemoStore(
     (s) => s.predictedLeavers.filter((l) => l.status !== 'Offboarded').length
   );
+  const adOuAttentionCount = useDemoStore(
+    (s) =>
+      s.adOus.filter((o) => o.governanceState !== 'Managed').length +
+      s.ouRequests.filter((r) => r.status === 'Pending Approval').length
+  );
   const totalMyTasksCount = pendingAccessRequests + pendingReviews + pendingOnboarding;
 
   // Auto-dismiss live Process++ toast notifications
@@ -245,6 +253,7 @@ export function DemoLayout() {
     if (id === 'role-mining' && miningOutliersCount > 0) return miningOutliersCount;
     if (id === 'licenses' && licenseOverrunCount > 0) return licenseOverrunCount;
     if (id === 'governance-assurance' && assuranceViolations > 0) return assuranceViolations;
+    if (id === 'ad-structural-governance' && adOuAttentionCount > 0) return adOuAttentionCount;
     if (id === 'access-reviews' && pendingReviews > 0) return pendingReviews;
     if (id === 'policies-sod' && activeViolations > 0) return activeViolations;
     if (id === 'entitlements' && driftEntitlements > 0) return driftEntitlements;
@@ -283,6 +292,8 @@ export function DemoLayout() {
         return <LicensesView />;
       case 'governance-assurance':
         return <GovernanceAssuranceView />;
+      case 'ad-structural-governance':
+        return <AdStructuralGovernanceView />;
       case 'access-reviews':
         return <AccessReviewsView />;
       case 'policies-sod':

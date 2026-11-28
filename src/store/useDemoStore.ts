@@ -4,6 +4,7 @@ import {
   CURRENT_DEMO_USER_PERSON_ID,
   ENTITLEMENT_ONBOARDING_WORKFLOWS,
   INITIAL_ACCESS_REQUESTS,
+  INITIAL_AD_OUS,
   INITIAL_ADOPTION_POLICY,
   INITIAL_ADOPTION_RECORDS,
   INITIAL_CONTRACTOR_REQUESTS,
@@ -28,6 +29,7 @@ import {
   INITIAL_MARKETPLACE_CATALOG,
   INITIAL_MINED_ROLES,
   INITIAL_MINING_OUTLIERS,
+  INITIAL_OU_REQUESTS,
   INITIAL_PLATFORM_CONFIG,
   INITIAL_PREDICTED_LEAVERS,
   INITIAL_PROVISIONING_JOBS,
@@ -57,6 +59,8 @@ import {
   type DemoMinedRoleCandidate,
   type DemoMiningOutlier,
   type DemoNonHuman,
+  type DemoOrganizationalUnit,
+  type DemoOuProvisioningRequest,
   type DemoPerson,
   type DemoPolicy,
   type DemoPredictedLeaver,
@@ -115,6 +119,8 @@ interface DemoStore {
   reviews: DemoReviewItem[];
   policies: DemoPolicy[];
   governanceControls: DemoGovernanceControl[];
+  adOus: DemoOrganizationalUnit[];
+  ouRequests: DemoOuProvisioningRequest[];
   emptyEntitlements: DemoEmptyEntitlement[];
   contractorRequests: DemoContractorOnboardingRequest[];
   entitlementRequests: DemoEntitlementOnboardingRequest[];
@@ -331,6 +337,30 @@ interface DemoStore {
   stagePredictedLeaverInSimulation: (leaverId: string) => void;
   executePredictedLeaverExitNow: (leaverId: string) => void;
 
+  // Active Directory Structural Governance (OU Management) actions
+  runAdOuDiscoveryScan: () => void;
+  governOrganizationalUnit: (
+    ouId: string,
+    businessOwner: string,
+    technicalCustodian: string
+  ) => void;
+  attestOuOwnership: (ouId: string) => void;
+  revokeOuDelegation: (ouId: string, delegationId: string) => void;
+  reconcileOuDrift: (ouId: string) => void;
+  relocateOrganizationalUnit: (ouId: string, newParentOuId: string | null) => void;
+  decommissionEmptyOu: (ouId: string) => void;
+  submitOuProvisioningRequest: (input: {
+    ouName: string;
+    parentOuId: string;
+    businessOwner: string;
+    technicalCustodian: string;
+    purpose: string;
+  }) => void;
+  advanceOuRequestApproval: (
+    requestId: string,
+    decision: 'approve-stage' | 'approve-all' | 'reject'
+  ) => void;
+
   // Account & Orphan Remediation actions (Reporting)
   quarantineOrphanAccount: (accountId: string) => void;
   linkOrphanAccountToOwner: (accountId: string, personId: string) => void;
@@ -391,6 +421,8 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
   reviews: INITIAL_DEMO_REVIEWS,
   policies: INITIAL_DEMO_POLICIES,
   governanceControls: INITIAL_GOVERNANCE_CONTROLS,
+  adOus: INITIAL_AD_OUS,
+  ouRequests: INITIAL_OU_REQUESTS,
   emptyEntitlements: INITIAL_EMPTY_ENTITLEMENTS,
   contractorRequests: INITIAL_CONTRACTOR_REQUESTS,
   entitlementRequests: INITIAL_ENTITLEMENT_REQUESTS,
@@ -3524,6 +3556,617 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
     }));
   },
 
+  runAdOuDiscoveryScan: () => {
+    const stamp = timeNow();
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const alreadyDiscoveredDbn = get().adOus.some((o) => o.id === 'ou-disc-dbn');
+
+    const newDiscoveredOu: DemoOrganizationalUnit = {
+      id: 'ou-disc-dbn',
+      objectGuid: '26fc5a3b-e8dc-4733-6cbd-00fb661c5012',
+      name: 'Marketing - Durban',
+      distinguishedName: 'OU=Marketing - Durban,OU=Departments,DC=corp,DC=identra,DC=net',
+      parentOuId: 'ou-root-depts',
+      parentDn: 'OU=Departments,DC=corp,DC=identra,DC=net',
+      description: 'Automatically discovered via AD LDAP delta scan — awaiting owner assignment.',
+      domain: 'corp.identra.net',
+      businessOwner: null,
+      technicalCustodian: null,
+      createdDate: todayIso,
+      lastModified: todayIso,
+      childCounts: { users: 19, groups: 4, computers: 16 },
+      governanceState: 'Discovered',
+      riskScore: 38,
+      containsPrivilegedAccounts: false,
+      namingCompliant: true,
+      inheritanceBlocked: false,
+      gpoLinks: [
+        { name: 'GPO-Baseline-Workstation-Hardening', enforced: true, status: 'Enabled' },
+      ],
+      delegatedPermissions: [],
+      complianceFlags: ['Discovered in AD — Not Yet Formally Governed (Owner Unassigned)'],
+      lastAttestedAt: null,
+    };
+
+    const nextOus = alreadyDiscoveredDbn
+      ? get().adOus
+      : [...get().adOus, newDiscoveredOu];
+    const nonComp = nextOus.filter((o) => o.governanceState === 'Non-Compliant').length;
+    const disc = nextOus.filter((o) => o.governanceState === 'Discovered').length;
+
+    set((s) => ({
+      adOus: nextOus,
+      toastMessage: alreadyDiscoveredDbn
+        ? `AD OU Discovery complete (${nextOus.length} OUs correlated via objectGUID · ${nonComp} Non-Compliant · ${disc} Discovered).`
+        : `AD OU Discovery found 1 new unmanaged OU ("Marketing - Durban") correlated by objectGUID — marked Discovered (not implicitly approved).`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'AD Structural Scanner',
+          processTag: 'OU-SCAN',
+          tone: alreadyDiscoveredDbn ? 'sky' : 'amber',
+          action: alreadyDiscoveredDbn
+            ? `Scanned & correlated ${nextOus.length} AD OUs via immutable objectGUID`
+            : `Discovered new unmanaged AD OU "Marketing - Durban" (objectGUID ${newDiscoveredOu.objectGuid.slice(0, 8)}…)`,
+          target: 'corp.identra.net',
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  governOrganizationalUnit: (ouId, businessOwner, technicalCustodian) => {
+    const ou = get().adOus.find((o) => o.id === ouId);
+    if (!ou) return;
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const stamp = timeNow();
+
+    const remainingFlags = ou.complianceFlags.filter(
+      (f) => !f.toLowerCase().includes('owner') && !f.toLowerCase().includes('discovered')
+    );
+    const hasExcessive = ou.delegatedPermissions.some((d) => d.excessive);
+    const nextState: DemoOrganizationalUnit['governanceState'] =
+      remainingFlags.length === 0 && !hasExcessive && !ou.driftEvent
+        ? 'Managed'
+        : 'Non-Compliant';
+
+    set((s) => ({
+      adOus: s.adOus.map((item) =>
+        item.id === ouId
+          ? {
+              ...item,
+              businessOwner,
+              technicalCustodian,
+              governanceState: nextState,
+              complianceFlags: remainingFlags,
+              lastAttestedAt: todayIso,
+              lastModified: todayIso,
+              riskScore: Math.max(12, item.riskScore - 24),
+            }
+          : item
+      ),
+      toastMessage: `Assigned Business Owner (${businessOwner}) & Technical Custodian (${technicalCustodian}) to "${ou.name}" — status: ${nextState}.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'AD Structural Gov',
+          processTag: 'OU-GOV',
+          tone: 'emerald',
+          action: `Brought OU under governance (Owner: ${businessOwner} · Custodian: ${technicalCustodian} · State: ${nextState})`,
+          target: ou.distinguishedName,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  attestOuOwnership: (ouId) => {
+    const ou = get().adOus.find((o) => o.id === ouId);
+    if (!ou) return;
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const stamp = timeNow();
+    set((s) => ({
+      adOus: s.adOus.map((item) =>
+        item.id === ouId ? { ...item, lastAttestedAt: todayIso } : item
+      ),
+      toastMessage: `Completed OU ownership attestation for "${ou.name}" (${ou.businessOwner ?? 'Unassigned'}).`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: ou.businessOwner ?? 'Governance Admin',
+          processTag: 'OU-ATT',
+          tone: 'emerald',
+          action: `Attested OU ownership and structural compliance for "${ou.name}"`,
+          target: ou.distinguishedName,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  revokeOuDelegation: (ouId, delegationId) => {
+    const ou = get().adOus.find((o) => o.id === ouId);
+    const del = ou?.delegatedPermissions.find((d) => d.id === delegationId);
+    if (!ou || !del) return;
+
+    const stamp = timeNow();
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const jobCode = `PRV-${9050 + get().provisioningJobs.length}`;
+
+    const nextDels = ou.delegatedPermissions.filter((d) => d.id !== delegationId);
+    const stillExcessive = nextDels.some((d) => d.excessive);
+    const nextFlags = stillExcessive
+      ? ou.complianceFlags
+      : ou.complianceFlags.filter(
+          (f) => !f.toLowerCase().includes('delegat')
+        );
+    const nextDrift =
+      ou.driftEvent?.kind === 'Unexpected Delegation' && !stillExcessive
+        ? undefined
+        : ou.driftEvent;
+    const nextState: DemoOrganizationalUnit['governanceState'] =
+      ou.businessOwner && nextFlags.length === 0 && !stillExcessive && !nextDrift
+        ? 'Managed'
+        : ou.governanceState;
+
+    const aclJob: DemoProvisioningJob = {
+      id: `prv-ou-acl-${Date.now()}`,
+      jobCode,
+      identity: del.principal,
+      identityEmail: 'ad-infra@identra-corp.io',
+      entitlementOrRole: `Revoke AD ACL: ${del.rights}`,
+      application: 'Active Directory',
+      operation: 'Delete',
+      status: 'Completed',
+      triggeredBy: `AD Structural Governance (${ou.name})`,
+      timestamp: stamp,
+      durationMs: 215,
+      mappings: [
+        {
+          attribute: 'nTSecurityDescriptor',
+          before: `${del.principal} → ${del.rights}`,
+          after: 'ACE Removed (Least Privilege Enforced)',
+          rule: `OU Delegation Governance · objectGUID ${ou.objectGuid.slice(0, 8)}`,
+        },
+      ],
+    };
+
+    set((s) => ({
+      provisioningJobs: [aclJob, ...s.provisioningJobs],
+      adOus: s.adOus.map((item) =>
+        item.id === ouId
+          ? {
+              ...item,
+              delegatedPermissions: nextDels,
+              complianceFlags: nextFlags,
+              driftEvent: nextDrift,
+              governanceState: nextState,
+              lastModified: todayIso,
+              riskScore: Math.max(14, item.riskScore - 28),
+            }
+          : item
+      ),
+      toastMessage: `Revoked excessive delegation "${del.principal}" on "${ou.name}" via Active Directory job ${jobCode}.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'AD Structural Gov',
+          processTag: 'OU-ACL',
+          tone: 'emerald',
+          action: `Revoked excessive AD delegation "${del.principal}" (${jobCode})`,
+          target: ou.distinguishedName,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  reconcileOuDrift: (ouId) => {
+    const ou = get().adOus.find((o) => o.id === ouId);
+    if (!ou || !ou.driftEvent) return;
+    const driftKind = ou.driftEvent.kind;
+    const stamp = timeNow();
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const nextFlags = ou.complianceFlags.filter(
+      (f) => !f.toLowerCase().includes('drift') && !f.toLowerCase().includes('out-of-band')
+    );
+    const hasExcessive = ou.delegatedPermissions.some((d) => d.excessive);
+    const nextState: DemoOrganizationalUnit['governanceState'] =
+      ou.businessOwner && nextFlags.length === 0 && !hasExcessive
+        ? 'Managed'
+        : ou.governanceState;
+
+    set((s) => ({
+      adOus: s.adOus.map((item) =>
+        item.id === ouId
+          ? {
+              ...item,
+              driftEvent: undefined,
+              complianceFlags: nextFlags,
+              governanceState: nextState,
+              lastModified: todayIso,
+              riskScore: Math.max(15, item.riskScore - 20),
+            }
+          : item
+      ),
+      toastMessage: `Reconciled structural drift (${driftKind}) on "${ou.name}" — objectGUID baseline updated.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'AD Structural Gov',
+          processTag: 'OU-DRF',
+          tone: 'emerald',
+          action: `Reconciled AD structural drift (${driftKind}) correlated by objectGUID`,
+          target: ou.distinguishedName,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  relocateOrganizationalUnit: (ouId, newParentOuId) => {
+    const ou = get().adOus.find((o) => o.id === ouId);
+    if (!ou || ou.parentOuId === newParentOuId || ou.id === newParentOuId) return;
+    const newParent = newParentOuId
+      ? get().adOus.find((o) => o.id === newParentOuId)
+      : null;
+    const nextParentDn = newParent ? newParent.distinguishedName : 'DC=corp,DC=identra,DC=net';
+    const nextDn = `OU=${ou.name},${nextParentDn}`;
+    const stamp = timeNow();
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const jobCode = `PRV-${9050 + get().provisioningJobs.length}`;
+
+    const moveJob: DemoProvisioningJob = {
+      id: `prv-ou-move-${Date.now()}`,
+      jobCode,
+      identity: `OU: ${ou.name}`,
+      identityEmail: 'ad-infra@identra-corp.io',
+      entitlementOrRole: `Governed OU Relocation (LDAP MODDN)`,
+      application: 'Active Directory',
+      operation: 'Update',
+      status: 'Completed',
+      triggeredBy: 'AD Structural Governance (Relocation Workflow)',
+      timestamp: stamp,
+      durationMs: 260,
+      mappings: [
+        {
+          attribute: 'distinguishedName',
+          before: ou.distinguishedName,
+          after: nextDn,
+          rule: `Immutable correlation preserved via objectGUID ${ou.objectGuid}`,
+        },
+      ],
+    };
+
+    set((s) => ({
+      provisioningJobs: [moveJob, ...s.provisioningJobs],
+      adOus: s.adOus.map((item) =>
+        item.id === ouId
+          ? {
+              ...item,
+              parentOuId: newParentOuId,
+              parentDn: nextParentDn,
+              distinguishedName: nextDn,
+              lastModified: todayIso,
+            }
+          : item
+      ),
+      toastMessage: `Relocated "${ou.name}" to ${nextParentDn} (${jobCode}) — objectGUID correlation preserved intact.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'AD Structural Gov',
+          processTag: 'OU-MOVE',
+          tone: 'sky',
+          action: `Governed OU relocation (${jobCode}): ${ou.distinguishedName} → ${nextDn}`,
+          target: ou.objectGuid,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  decommissionEmptyOu: (ouId) => {
+    const ou = get().adOus.find((o) => o.id === ouId);
+    if (!ou) return;
+    const totalChildren =
+      ou.childCounts.users + ou.childCounts.groups + ou.childCounts.computers;
+    if (totalChildren > 0) {
+      set({
+        toastMessage: `Cannot delete "${ou.name}": OU still contains ${totalChildren} child object(s).`,
+      });
+      return;
+    }
+
+    const stamp = timeNow();
+    const jobCode = `PRV-${9050 + get().provisioningJobs.length}`;
+    const delJob: DemoProvisioningJob = {
+      id: `prv-ou-del-${Date.now()}`,
+      jobCode,
+      identity: `Empty OU: ${ou.name}`,
+      identityEmail: 'ad-infra@identra-corp.io',
+      entitlementOrRole: `LDAP DELETE organizationalUnit`,
+      application: 'Active Directory',
+      operation: 'Delete',
+      status: 'Completed',
+      triggeredBy: 'AD Structural Governance (Empty OU Cleanup)',
+      timestamp: stamp,
+      durationMs: 195,
+      mappings: [
+        {
+          attribute: 'distinguishedName',
+          before: ou.distinguishedName,
+          after: null,
+          rule: `Decommissioned abandoned 0-object OU (${ou.objectGuid})`,
+        },
+      ],
+    };
+
+    set((s) => ({
+      provisioningJobs: [delJob, ...s.provisioningJobs],
+      adOus: s.adOus.filter((item) => item.id !== ouId),
+      toastMessage: `Decommissioned empty abandoned OU "${ou.name}" from Active Directory (${jobCode}).`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'AD Structural Gov',
+          processTag: 'OU-DEL',
+          tone: 'emerald',
+          action: `Deleted empty abandoned OU "${ou.name}" via Active Directory job ${jobCode}`,
+          target: ou.distinguishedName,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  submitOuProvisioningRequest: (input) => {
+    const parent = get().adOus.find((o) => o.id === input.parentOuId);
+    const parentDn = parent ? parent.distinguishedName : 'DC=corp,DC=identra,DC=net';
+    const cleanName = input.ouName.trim();
+    const namingOk = /^[A-Z][A-Za-z0-9]+(\s-\s[A-Z][A-Za-z0-9 ]+)?$/.test(cleanName);
+    const stamp = timeNow();
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const reqCode = `OUR-${2041 + get().ouRequests.length}`;
+
+    const newReq: DemoOuProvisioningRequest = {
+      id: `ou-req-${Date.now()}`,
+      requestCode: reqCode,
+      ouName: cleanName,
+      parentOuId: input.parentOuId,
+      parentDn,
+      targetDn: `OU=${cleanName},${parentDn}`,
+      businessOwner: input.businessOwner.trim(),
+      technicalCustodian: input.technicalCustodian.trim() || 'Alex Carter',
+      purpose: input.purpose.trim(),
+      requestedBy: 'Ivan Lubbe',
+      submittedAt: `${todayIso} ${stamp.slice(0, 5)}`,
+      namingCheckPassed: namingOk,
+      status: 'Pending Approval',
+      stages: [
+        {
+          stepOrder: 1,
+          label: 'Business Owner Approval',
+          actor: input.businessOwner.trim(),
+          status: 'Active',
+        },
+        {
+          stepOrder: 2,
+          label: 'AD Infrastructure Approval',
+          actor: `${input.technicalCustodian.trim() || 'Alex Carter'} (AD Infrastructure)`,
+          status: 'Pending',
+        },
+        {
+          stepOrder: 3,
+          label: 'IGA Automatically Provisions OU in AD',
+          actor: 'Provisioning Engine (LDAP CREATE)',
+          status: 'Pending',
+        },
+        {
+          stepOrder: 4,
+          label: 'Discover & Correlate via objectGUID · Activate Governance',
+          actor: 'AD Structural Governance Engine',
+          status: 'Pending',
+        },
+      ],
+    };
+
+    set((s) => ({
+      ouRequests: [newReq, ...s.ouRequests],
+      toastMessage: `Submitted OU Provisioning Request ${reqCode} ("${cleanName}") — routed to ${newReq.businessOwner} for Business Owner approval.`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'OU Request Portal',
+          processTag: 'OU-REQ',
+          tone: 'sky',
+          action: `Submitted governed OU creation request ${reqCode} (${newReq.targetDn})`,
+          target: cleanName,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
+  advanceOuRequestApproval: (requestId, decision) => {
+    const req = get().ouRequests.find((r) => r.id === requestId);
+    if (!req || req.status !== 'Pending Approval') return;
+    const stamp = timeNow();
+    const todayIso = new Date().toISOString().slice(0, 10);
+
+    if (decision === 'reject') {
+      set((s) => ({
+        ouRequests: s.ouRequests.map((r) =>
+          r.id === requestId ? { ...r, status: 'Rejected' } : r
+        ),
+        toastMessage: `Rejected OU Provisioning Request ${req.requestCode} ("${req.ouName}").`,
+        auditLog: [
+          {
+            id: `aud-${Date.now()}`,
+            time: stamp,
+            actor: 'AD Structural Gov',
+            processTag: 'OU-REJ',
+            tone: 'rose',
+            action: `Rejected OU creation request ${req.requestCode}`,
+            target: req.targetDn,
+          },
+          ...s.auditLog,
+        ],
+      }));
+      return;
+    }
+
+    const activeIdx = req.stages.findIndex((st) => st.status === 'Active');
+    const willCompleteApprovals = decision === 'approve-all' || activeIdx >= 1;
+
+    if (!willCompleteApprovals) {
+      // Advance Step 1 (Business Owner) → Step 2 (AD Infrastructure)
+      set((s) => ({
+        ouRequests: s.ouRequests.map((r) =>
+          r.id === requestId
+            ? {
+                ...r,
+                stages: r.stages.map((st, idx) =>
+                  idx === 0
+                    ? { ...st, status: 'Completed' }
+                    : idx === 1
+                      ? { ...st, status: 'Active' }
+                      : st
+                ),
+              }
+            : r
+        ),
+        toastMessage: `${req.requestCode}: Business Owner Approval completed — routed to AD Infrastructure Approval.`,
+        auditLog: [
+          {
+            id: `aud-${Date.now()}`,
+            time: stamp,
+            actor: req.businessOwner,
+            processTag: 'OU-APR',
+            tone: 'sky',
+            action: `Approved Business Owner stage on ${req.requestCode}; advancing to AD Infrastructure`,
+            target: req.ouName,
+          },
+          ...s.auditLog,
+        ],
+      }));
+      return;
+    }
+
+    // Complete approvals → Auto-provision OU in AD → Discover & Correlate objectGUID → Activate Governance!
+    const newGuid = `${Math.random().toString(16).slice(2, 10)}-4f91-4b88-9a21-${Date.now().toString(16).slice(-12)}`;
+    const newOuId = `ou-prov-${Date.now()}`;
+    const jobCode = `PRV-${9050 + get().provisioningJobs.length}`;
+
+    const createdOu: DemoOrganizationalUnit = {
+      id: newOuId,
+      objectGuid: newGuid,
+      name: req.ouName,
+      distinguishedName: req.targetDn,
+      parentOuId: req.parentOuId,
+      parentDn: req.parentDn,
+      description: req.purpose,
+      domain: 'corp.identra.net',
+      businessOwner: req.businessOwner,
+      technicalCustodian: req.technicalCustodian,
+      createdDate: todayIso,
+      lastModified: todayIso,
+      childCounts: { users: 0, groups: 0, computers: 0 },
+      governanceState: 'Managed',
+      riskScore: 10,
+      containsPrivilegedAccounts: false,
+      namingCompliant: req.namingCheckPassed,
+      inheritanceBlocked: false,
+      gpoLinks: [
+        { name: 'GPO-Baseline-Workstation-Hardening', enforced: true, status: 'Enabled' },
+      ],
+      delegatedPermissions: [
+        {
+          id: `del-prov-${Date.now()}`,
+          principal: 'SG-AD-Identity-Provisioning-Engine',
+          principalType: 'Service Account',
+          rights: 'Create/Delete User & Group Objects (Scoped)',
+          inherited: true,
+          excessive: false,
+          reviewedOn: todayIso,
+        },
+      ],
+      complianceFlags: [],
+      lastAttestedAt: todayIso,
+    };
+
+    const provJob: DemoProvisioningJob = {
+      id: `prv-ou-new-${Date.now()}`,
+      jobCode,
+      identity: `OU: ${req.ouName}`,
+      identityEmail: 'ad-infra@identra-corp.io',
+      entitlementOrRole: `LDAP CREATE organizationalUnit (${req.requestCode})`,
+      application: 'Active Directory',
+      operation: 'Create',
+      status: 'Completed',
+      triggeredBy: `OU Provisioning Workflow (${req.requestCode})`,
+      timestamp: stamp,
+      durationMs: 280,
+      mappings: [
+        {
+          attribute: 'distinguishedName',
+          before: null,
+          after: req.targetDn,
+          rule: `Approved by ${req.businessOwner} + AD Infrastructure`,
+        },
+        {
+          attribute: 'objectGUID',
+          before: null,
+          after: newGuid,
+          rule: 'Discovered & Correlated Automatically Post-Create',
+        },
+        {
+          attribute: 'managedBy',
+          before: null,
+          after: req.businessOwner,
+          rule: 'Active Structural Governance Binding',
+        },
+      ],
+    };
+
+    set((s) => ({
+      adOus: [...s.adOus, createdOu],
+      provisioningJobs: [provJob, ...s.provisioningJobs],
+      ouRequests: s.ouRequests.map((r) =>
+        r.id === requestId
+          ? {
+              ...r,
+              status: 'Provisioned & Governed',
+              provisionedOuId: newOuId,
+              provisionedGuid: newGuid,
+              stages: r.stages.map((st) => ({ ...st, status: 'Completed' })),
+            }
+          : r
+      ),
+      toastMessage: `Provisioned "${req.ouName}" in Active Directory (${jobCode}), correlated via objectGUID, and activated Managed Governance!`,
+      auditLog: [
+        {
+          id: `aud-${Date.now()}`,
+          time: stamp,
+          actor: 'AD Structural Gov',
+          processTag: 'OU-PROV',
+          tone: 'emerald',
+          action: `Provisioned & correlated new Managed OU "${req.ouName}" (${jobCode} · objectGUID ${newGuid.slice(0, 8)}…)`,
+          target: req.targetDn,
+        },
+        ...s.auditLog,
+      ],
+    }));
+  },
+
   retryEmailNotification: (emailId) => {
     const email = get().emailNotifications.find((e) => e.id === emailId);
     if (!email) return;
@@ -4975,6 +5618,8 @@ export const useDemoStore = create<DemoStore>((set, get) => ({
       reviews: INITIAL_DEMO_REVIEWS,
       policies: INITIAL_DEMO_POLICIES,
       governanceControls: INITIAL_GOVERNANCE_CONTROLS,
+      adOus: INITIAL_AD_OUS,
+      ouRequests: INITIAL_OU_REQUESTS,
       emptyEntitlements: INITIAL_EMPTY_ENTITLEMENTS,
       contractorRequests: INITIAL_CONTRACTOR_REQUESTS,
       entitlementRequests: INITIAL_ENTITLEMENT_REQUESTS,
